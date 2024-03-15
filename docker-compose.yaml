@@ -7,3 +7,5 @@ services:
       dockerfile: Dockerfile
     ports:
       - "9955:80"
+    environment:
+      - ROOT_PATH="/tide_windows"

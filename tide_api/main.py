@@ -14,6 +14,7 @@ from tide_tools.lib import get_station_options, get_station_by_name
 
 app = FastAPI(
     title="Tide Window API",
+    root_path=os.getenv("ROOT_PATH", "/"),
     description="API to get tide windows for a given station between two dates",
     version="0.1.0",
     openapi_tags=[
