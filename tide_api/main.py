@@ -1,11 +1,13 @@
 import enum
 import io
+import os
 from datetime import datetime, date
 from typing import Optional
 
 import arrow
 import polars as pl
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.params import Path, Query
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from pydantic import BaseModel
 
@@ -91,10 +93,10 @@ def station_info_by_name(station_name: StationName) -> StationRead:
 
 
 def get_tides(
-    station_name: StationName,
-    start_date: datetime,
-    end_date: datetime,
-    tz: Optional[str] = Query("America/Vancouver"),
+        station_name: StationName,
+        start_date: datetime,
+        end_date: datetime,
+        tz: Optional[str] = Query("America/Vancouver"),
 ):
     start_date = arrow.get(start_date).datetime
     end_date = arrow.get(end_date).datetime
@@ -114,13 +116,13 @@ def get_tides(
 
 @app.get("/tides/{station_name}.csv", tags=["Tides"])
 def get_tides_for_station_between_dates_as_csv(
-    station_name: StationName,
-    start_date: datetime,
-    end_date: datetime,
-    tz: Optional[str] = Query("America/Vancouver"),
-    excel_date_format: bool = Query(
-        False, description="Convert to Excel date format instead of ISO8601"
-    ),
+        station_name: StationName = Path(..., description="The name of the station"),
+        start_date: datetime = Query(..., description="The start date in ISO8601 format"),
+        end_date: datetime = Query(..., description="The end date in ISO8601 format"),
+        tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+        excel_date_format: bool = Query(
+            False, description="Convert to Excel date format instead of ISO8601"
+        ),
 ):
     sheet = get_tides(station_name, start_date, end_date, tz)
     if isinstance(sheet, HTTPException):
@@ -166,10 +168,11 @@ def get_tides_for_station_between_dates_as_csv(
 
 @app.get("/tides/{station_name}", tags=["Tides"])
 def get_tides_for_station_between_dates(
-    station_name: StationName,
-    start_date: datetime,
-    end_date: datetime,
-    tz: Optional[str] = Query("America/Vancouver"),
+        station_name: StationName = Path(..., description="The name of the station"),
+        start_date: datetime = Query(..., description="The start date in ISO8601 format",
+                                     examples=["2021-08-01", "2021-08-01T12:30:00"]),
+        end_date: datetime = Query(..., description="The end date in ISO8601 format"),
+        tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
 ) -> list[TideWindowRead]:
     tides = get_tides(station_name, start_date, end_date, tz)
     if isinstance(tides, HTTPException):
