@@ -109,7 +109,7 @@ def get_data_sheet(
 
         plt.show()
 
-    return sheet
+    return sheet, tides
 
 
 if __name__ == "__main__":
