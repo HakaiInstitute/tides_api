@@ -16,9 +16,9 @@ from tide_tools.lib import get_station_options, get_station_by_name
 
 app = FastAPI(
     title="Tide Window API",
-    root_path=os.getenv("ROOT_PATH", "/"),
     description="API to get tide windows for a given station between two dates",
     version="0.1.0",
+    root_path=os.getenv("ROOT_PATH", ""),
     openapi_tags=[
         {
             "name": "Stations",
@@ -67,7 +67,7 @@ class TideWindowRead(BaseModel):
 @app.get("/", include_in_schema=False)
 def redirect_to_docs():
     # Redirect to docs
-    return RedirectResponse(url="/docs")
+    return RedirectResponse(url=app.root_path + app.docs_url)
 
 
 @app.get("/stations", tags=["Stations"])

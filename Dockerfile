@@ -13,4 +13,6 @@ COPY ./tide_tools /app/tide_tools
 
 EXPOSE 80
 
+ENV ROOT_PATH="/"
+
 ENTRYPOINT ["uvicorn", "tide_api.main:app", "--proxy-headers", "--host", "0.0.0.0", "--port", "80"]
