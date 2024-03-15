@@ -5,13 +5,12 @@ from datetime import datetime, date, timedelta
 from typing import Optional
 
 import arrow
+import dateutil.tz
+import matplotlib.dates as mdates
 import polars as pl
 from fastapi import FastAPI, HTTPException
 from fastapi.params import Path, Query
 from fastapi.responses import RedirectResponse, PlainTextResponse
-from matplotlib import ticker
-import dateutil.tz
-import matplotlib.dates as mdates
 from pydantic import BaseModel
 from starlette.responses import Response
 
@@ -34,16 +33,11 @@ app = FastAPI(
         },
     ],
 )
-
-station_names = list(
-    map(
-        lambda s: s.officialName,
-        filter(
-            lambda s: any([t.code == "wlp" for t in s.timeSeries]),
-            get_station_options(),
-        ),
-    )
-)
+stations = list(filter(
+    lambda s: any([t.code == "wlp" for t in s.timeSeries]),
+    sorted(get_station_options(), key=lambda s: s.officialName)
+))
+station_names = [s.officialName for s in stations]
 StationName = enum.Enum("StationName", dict([(s, s) for s in sorted(station_names)]))
 
 
@@ -76,18 +70,15 @@ def redirect_to_docs():
 
 @app.get("/stations", tags=["Stations"])
 def list_stations() -> list[StationRead]:
-    stations = get_station_options()
-    stations = filter(lambda s: any(t.code == "wlp" for t in s.timeSeries), stations)
-    stations = [
+    return [
         StationRead(name=s.officialName, latitude=s.latitude, longitude=s.longitude)
         for s in stations
     ]
-    return stations
 
 
 @app.get("/stations/{station_name}", tags=["Stations"])
 def station_info_by_name(station_name: StationName) -> StationRead:
-    station = get_station_by_name(station_name.value)
+    station = next(s for s in stations if s.officialName == station_name.value)
     station = StationRead(
         name=station.officialName,
         latitude=station.latitude,
@@ -97,10 +88,10 @@ def station_info_by_name(station_name: StationName) -> StationRead:
 
 
 def get_tides(
-    station_name: StationName,
-    start_date: datetime,
-    end_date: datetime,
-    tz: Optional[str] = Query("America/Vancouver"),
+        station_name: StationName,
+        start_date: datetime,
+        end_date: datetime,
+        tz: Optional[str] = Query("America/Vancouver"),
 ):
     start_date = arrow.get(start_date).datetime
     end_date = arrow.get(end_date).datetime
@@ -120,9 +111,10 @@ def get_tides(
 
 @app.get("/tides/{station_name}.png", tags=["Tides"])
 def graph_tide_for_station_on_date(
-    station_name: StationName = Path(..., description="The name of the station"),
-    date: datetime = Query(..., description="The date to plot in ISO8601 format"),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+        station_name: StationName = Path(..., description="The name of the station"),
+        date: datetime = Query(..., description="The date to plot in ISO8601 format"),
+        tz: Optional[str] = Query("America/Vancouver",
+                                  description="The timezone to use"),
 ):
     start_date = arrow.get(date, tz).to("UTC").datetime
     end_date = start_date + timedelta(days=1)
@@ -194,13 +186,16 @@ def graph_tide_for_station_on_date(
 
 @app.get("/tides/{station_name}.csv", tags=["Tides"])
 def get_tides_for_station_between_dates_as_csv(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: datetime = Query(..., description="The start date in ISO8601 format"),
-    end_date: datetime = Query(..., description="The end date in ISO8601 format"),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
-    excel_date_format: bool = Query(
-        False, description="Convert to Excel date format instead of ISO8601"
-    ),
+        station_name: StationName = Path(..., description="The name of the station"),
+        start_date: datetime = Query(...,
+                                     description="The start date in ISO8601 format"),
+        end_date: datetime = Query(..., description="The end date in ISO8601 format"),
+        tz: Optional[str] = Query("America/Vancouver",
+                                  description="The timezone to use"),
+        excel_date_format: bool = Query(
+            False,
+            description="Export dates in Excel decimal format instead of ISO8601 strings",
+        ),
 ):
     sheet, _ = get_tides(station_name, start_date, end_date, tz)
     if isinstance(sheet, HTTPException):
@@ -262,14 +257,15 @@ def get_tides_for_station_between_dates_as_csv(
 
 @app.get("/tides/{station_name}", tags=["Tides"])
 def get_tides_for_station_between_dates(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: datetime = Query(
-        ...,
-        description="The start date in ISO8601 format",
-        examples=["2021-08-01", "2021-08-01T12:30:00"],
-    ),
-    end_date: datetime = Query(..., description="The end date in ISO8601 format"),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+        station_name: StationName = Path(..., description="The name of the station"),
+        start_date: datetime = Query(
+            ...,
+            description="The start date in ISO8601 format",
+            examples=["2021-08-01", "2021-08-01T12:30:00"],
+        ),
+        end_date: datetime = Query(..., description="The end date in ISO8601 format"),
+        tz: Optional[str] = Query("America/Vancouver",
+                                  description="The timezone to use"),
 ) -> list[TideWindowRead]:
     tides = get_tides(station_name, start_date, end_date, tz)
     if isinstance(tides, HTTPException):

@@ -1,8 +1,9 @@
 from datetime import datetime
 
 import arrow
+import astral
+import astral.sun
 import polars as pl
-import astral, astral.sun
 from matplotlib import pyplot as plt
 
 from tide_tools.lib import (
