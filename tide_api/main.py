@@ -235,12 +235,12 @@ def get_tides_for_station_between_dates_as_csv(
                 .dt.timestamp(time_unit="ms")
                 .truediv(24 * 60 * 60 * 1000)
                 .add(25569),
-                pl.col("window_start_1.5m")
+                pl.col("window_start_1p5m")
                 .cast(pl.Datetime)
                 .dt.timestamp(time_unit="ms")
                 .truediv(24 * 60 * 60 * 1000)
                 .add(25569),
-                pl.col("window_end_1.5m")
+                pl.col("window_end_1p5m")
                 .cast(pl.Datetime)
                 .dt.timestamp(time_unit="ms")
                 .truediv(24 * 60 * 60 * 1000)
