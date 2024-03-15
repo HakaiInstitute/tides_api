@@ -8,4 +8,4 @@ services:
     ports:
       - "9955:80"
     environment:
-      - ROOT_PATH="/tide_windows"
+      - ROOT_PATH=/tide_windows
