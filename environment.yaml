@@ -1,0 +1,15 @@
+name: tides
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - scipy
+  - numpy
+  - matplotlib
+  - requests
+  - arrow
+  - polars
+  - pydantic
+  - astral<3
+  - uvicorn
+  - fastapi
