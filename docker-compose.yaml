@@ -1,0 +1,9 @@
+version: '3.7'
+services:
+  tide_window_api:
+    image: "tide_window_api:latest"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9955:80"
