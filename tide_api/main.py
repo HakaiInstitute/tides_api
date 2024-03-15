@@ -1,6 +1,6 @@
 import enum
 import io
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 import arrow
@@ -12,7 +12,21 @@ from pydantic import BaseModel
 from tide_tools.get_tide_sheet import get_data_sheet
 from tide_tools.lib import get_station_options, get_station_by_name
 
-app = FastAPI()
+app = FastAPI(
+    title="Tide Window API",
+    description="API to get tide windows for a given station between two dates",
+    version="0.1.0",
+    openapi_tags=[
+        {
+            "name": "Stations",
+            "description": "Get information about stations available in the API",
+        },
+        {
+            "name": "Tides",
+            "description": "Get tide windows for a given station between two dates",
+        },
+    ],
+)
 
 station_names = list(
     map(
@@ -30,6 +44,21 @@ class StationRead(BaseModel):
     name: str
     latitude: float
     longitude: float
+
+
+class TideWindowRead(BaseModel):
+    low_tide_date: date
+    low_tide_height_m: float
+    low_tide_time: datetime
+    sunrise: Optional[datetime]
+    noon: Optional[datetime]
+    sunset: Optional[datetime]
+    window_start_2m: Optional[datetime]
+    window_start_1p5m: Optional[datetime]
+    window_end_1p5m: Optional[datetime]
+    window_end_2m: Optional[datetime]
+    hours_under_1p5m: Optional[float]
+    hours_under_2m: Optional[float]
 
 
 @app.get("/", include_in_schema=False)
@@ -61,10 +90,10 @@ def station_info_by_name(station_name: StationName) -> StationRead:
 
 
 def get_tides(
-        station_name: StationName,
-        start_date: datetime,
-        end_date: datetime,
-        tz: Optional[str] = Query("America/Vancouver"),
+    station_name: StationName,
+    start_date: datetime,
+    end_date: datetime,
+    tz: Optional[str] = Query("America/Vancouver"),
 ):
     start_date = arrow.get(start_date).datetime
     end_date = arrow.get(end_date).datetime
@@ -82,16 +111,15 @@ def get_tides(
     return get_data_sheet(station_name.value, start_date, end_date, tz)
 
 
-
-
-
 @app.get("/tides/{station_name}.csv", tags=["Tides"])
 def get_tides_for_station_between_dates_as_csv(
-        station_name: StationName,
-        start_date: datetime,
-        end_date: datetime,
-        tz: Optional[str] = Query("America/Vancouver"),
-        excel_date_format: bool = Query(False, description="Convert to Excel date format instead of ISO8601"),
+    station_name: StationName,
+    start_date: datetime,
+    end_date: datetime,
+    tz: Optional[str] = Query("America/Vancouver"),
+    excel_date_format: bool = Query(
+        False, description="Convert to Excel date format instead of ISO8601"
+    ),
 ):
     sheet = get_tides(station_name, start_date, end_date, tz)
     if isinstance(sheet, HTTPException):
@@ -99,16 +127,34 @@ def get_tides_for_station_between_dates_as_csv(
 
     df = pl.DataFrame(sheet)
     if excel_date_format:
-        df = df.with_columns([
-            pl.col("low_tide_time").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("sunrise").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("noon").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("sunset").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("window_start_2m").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("window_start_1.5m").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("window_end_1.5m").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-            pl.col("window_end_2m").cast(pl.Datetime).dt.timestamp(time_unit='ms').truediv(24*60*60*1000).add(25569),
-        ])
+        df = df.with_columns(
+            [
+                pl.col("low_tide_time")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("sunrise")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("noon")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("sunset")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("window_start_2m")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("window_start_1.5m")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("window_end_1.5m")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+                pl.col("window_end_2m")
+                .cast(pl.Datetime).dt.timestamp(time_unit="ms")
+                .truediv(24 * 60 * 60 * 1000).add(25569),
+            ]
+        )
 
     with io.BytesIO() as f:
         df.write_csv(f)
@@ -116,14 +162,19 @@ def get_tides_for_station_between_dates_as_csv(
 
     return PlainTextResponse(content=csv, media_type="text/csv")
 
+
 @app.get("/tides/{station_name}", tags=["Tides"])
 def get_tides_for_station_between_dates(
-        station_name: StationName,
-        start_date: datetime,
-        end_date: datetime,
-        tz: Optional[str] = Query("America/Vancouver"),
-):
-    return get_tides(station_name, start_date, end_date, tz)
+    station_name: StationName,
+    start_date: datetime,
+    end_date: datetime,
+    tz: Optional[str] = Query("America/Vancouver"),
+) -> list[TideWindowRead]:
+    tides = get_tides(station_name, start_date, end_date, tz)
+    if isinstance(tides, HTTPException):
+        raise tides
+    tides = [TideWindowRead.parse_obj(t) for t in tides]
+    return tides
 
 
 if __name__ == "__main__":

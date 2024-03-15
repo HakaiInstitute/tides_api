@@ -73,10 +73,10 @@ def get_data_sheet(
                 "noon": format_time(noon, tz),
                 "sunset": format_time(sunset, tz),
                 "window_start_2m": format_time(w2[0], tz),
-                "window_start_1.5m": format_time(w1p5[0], tz),
-                "window_end_1.5m": format_time(w1p5[1], tz),
+                "window_start_1p5m": format_time(w1p5[0], tz),
+                "window_end_1p5m": format_time(w1p5[1], tz),
                 "window_end_2m": format_time(w2[1], tz),
-                "hours_under_1.5m": hours_time_difference(w1p5[1], w1p5[0]),
+                "hours_under_1p5m": hours_time_difference(w1p5[1], w1p5[0]),
                 "hours_under_2m": hours_time_difference(w2[1], w2[0]),
             }
         )
