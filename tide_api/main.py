@@ -43,7 +43,7 @@ stations = list(
 station_names = [s.officialName for s in stations]
 StationName = enum.Enum("StationName", dict([(s, s) for s in sorted(station_names)]))
 
-iso8601_examples = {
+iso8601_start_examples = {
     "date": {
         "summary": "Date (August 1, 2024)",
         "value": "2024-08-01",
@@ -51,6 +51,17 @@ iso8601_examples = {
     "datetime": {
         "summary": "Date with time (August 1, 2024 at 1:30 PM)",
         "value": "2024-08-01T13:30:00",
+    },
+}
+
+iso8601_end_examples = {
+    "date": {
+        "summary": "Date (August 3, 2024)",
+        "value": "2024-08-03",
+    },
+    "datetime": {
+        "summary": "Date with time (August 3, 2024 at 1:30 PM)",
+        "value": "2024-08-03T13:30:00",
     },
 }
 
@@ -122,7 +133,7 @@ def graph_24h_tide_for_station_on_date(
     date: datetime = Query(
         ...,
         description="The start date and time to plot in ISO8601 format",
-        openapi_examples=iso8601_examples,
+        openapi_examples=iso8601_start_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
 ):
@@ -198,12 +209,12 @@ def get_tides_for_station_between_dates_as_csv(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        openapi_examples=iso8601_examples,
+        openapi_examples=iso8601_start_examples,
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        openapi_examples=iso8601_examples,
+        openapi_examples=iso8601_end_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     excel_date_format: bool = Query(
@@ -272,12 +283,12 @@ def get_tides_for_station_between_dates(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        openapi_examples=iso8601_examples,
+        openapi_examples=iso8601_start_examples,
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        openapi_examples=iso8601_examples,
+        openapi_examples=iso8601_end_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
 ) -> list[TideWindowRead]:
