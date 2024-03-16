@@ -7,6 +7,7 @@ from typing import Optional
 import arrow
 import dateutil.tz
 import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import polars as pl
 from fastapi import FastAPI, HTTPException
 from fastapi.params import Path, Query
@@ -106,18 +107,11 @@ def get_tides(
     end_date: datetime,
     tz: Optional[str] = Query("America/Vancouver"),
 ):
-    start_date = arrow.get(start_date).datetime
-    end_date = arrow.get(end_date).datetime
+    start_date = arrow.get(start_date, tz).datetime
+    end_date = arrow.get(end_date, tz).datetime
 
-    try:
-        arrow.get(tzinfo=tz)
-    except arrow.parser.ParserError:
-        return HTTPException(status_code=400, detail="Invalid timezone")
-
-    if start_date > end_date:
-        return HTTPException(
-            status_code=400, detail="start_date must be before end_date"
-        )
+    if end_date <= start_date:
+        raise ValueError("End date must be after start date")
 
     return get_data_sheet(station_name.value, start_date, end_date, tz)
 
@@ -132,13 +126,11 @@ def graph_24h_tide_for_station_on_date(
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
 ):
-    start_date = arrow.get(date, tz).to("UTC").datetime
+    start_date = arrow.get(date, tz).datetime
     end_date = start_date + timedelta(days=1)
     sheet, tides = get_tides(station_name, start_date, end_date, tz)
     if isinstance(sheet, HTTPException):
         raise sheet
-
-    import matplotlib.pyplot as plt
 
     fig = plt.figure()
     ax1 = fig.subplots()
@@ -149,7 +141,7 @@ def graph_24h_tide_for_station_on_date(
     plt.xlabel("Time")
 
     plt.plot(
-        [arrow.get(t.eventDate).to(tz).datetime for t in tides],
+        [arrow.get(t.eventDate, tz).datetime for t in tides],
         [t.value for t in tides],
         c="gray",
     )
@@ -220,9 +212,6 @@ def get_tides_for_station_between_dates_as_csv(
     ),
 ):
     sheet, _ = get_tides(station_name, start_date, end_date, tz)
-    if isinstance(sheet, HTTPException):
-        raise sheet
-
     df = pl.DataFrame(sheet)
     if excel_date_format:
         df = df.with_columns(
@@ -283,20 +272,21 @@ def get_tides_for_station_between_dates(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        examples=["2021-08-01", "2021-08-01T12:30:00"],
+        openapi_examples=iso8601_examples,
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        examples=["2021-08-01", "2021-08-01T12:30:00"],
+        openapi_examples=iso8601_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
 ) -> list[TideWindowRead]:
-    tides = get_tides(station_name, start_date, end_date, tz)
-    if isinstance(tides, HTTPException):
-        raise tides
-    tides = [TideWindowRead.parse_obj(t) for t in tides]
-    return tides
+    try:
+        sheet, _ = get_tides(station_name, start_date, end_date, tz)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    sheet = [TideWindowRead.parse_obj(t) for t in sheet]
+    return sheet
 
 
 if __name__ == "__main__":

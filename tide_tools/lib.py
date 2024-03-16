@@ -57,7 +57,7 @@ def get_tides_between_dates(
 ) -> list[TideMeasurement]:
     if "wlp" not in [ts.code for ts in station.timeSeries]:
         raise ValueError("Station does not have water level data")
-    if end < start:
+    if end <= start:
         raise ValueError("End date must be after start date")
 
     num_days = (end - start).days + 1
@@ -91,9 +91,10 @@ def get_tides_between_dates(
         if not req.ok:
             raise Exception(f"Failed to get tides: {req.text}")
         tides.extend([TideMeasurement.parse_obj(t) for t in req.json()])
+
     # Convert tz back
     for i, t in enumerate(tides):
-        tides[i].eventDate = t.eventDate.replace(tzinfo=tz)
+        tides[i].eventDate = arrow.get(t.eventDate).to(tz).datetime
 
     return tides
 
@@ -168,6 +169,10 @@ def find_tide_windows(
     for partition in tide_partitions:
         timestamps = [arrow.get(d.eventDate).timestamp() for d in partition]
         heights = [d.value for d in partition]
+
+        if len(timestamps) <= 3:
+            windows.append((None, None))
+            continue
 
         f = InterpolatedUnivariateSpline(
             timestamps, [(h - max_tide_height) for h in heights], k=3
