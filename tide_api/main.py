@@ -132,8 +132,10 @@ def get_tides(
     start_date: datetime,
     end_date: datetime,
     tz: Optional[str] = "America/Vancouver",
-    tide_window: list[float] = [1.5, 2],
+    tide_window: list[float] = None,
 ):
+    if tide_window is None:
+        tide_window = []
     start_date = arrow.get(start_date, tz).datetime
     end_date = arrow.get(end_date, tz).datetime
 
@@ -154,10 +156,14 @@ def graph_24h_tide_for_station_on_date(
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
-        [1.5, 2],
+        [],
         description="Tide windows of interest, in meters",
     ),
-    sunrise_sunset: bool = Query(True, description="Show sunrise and sunset times"),
+    show_sunrise_sunset: bool = Query(True, description="Show sunrise and sunset times"),
+    show_current_time: bool = Query(True, description="Show the current time"),
+    width: int = Query(640, description="Width of the plot in pixels"),
+    height: int = Query(480, description="Height of the plot in pixels"),
+    dpi: int = Query(100, description="DPI of the plot"),
 ):
     start_date = arrow.get(date, tz).datetime
     end_date = start_date + timedelta(days=1)
@@ -166,7 +172,7 @@ def graph_24h_tide_for_station_on_date(
         raise sheet
     sheet = [TideWindowRead.parse_obj(t) for t in sheet]
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(width/dpi, height/dpi), dpi=dpi)
     ax1 = fig.subplots()
     ax1.grid(axis="y")
 
@@ -198,14 +204,19 @@ def graph_24h_tide_for_station_on_date(
                 d = arrow.get(we).datetime
                 plt.axvline(d, c=c, linestyle="dotted")
                 x_ticks.append(d)
-        if row.sunrise and sunrise_sunset:
+        if row.sunrise and show_sunrise_sunset:
             d = arrow.get(row.sunrise).datetime
             plt.axvline(d, c="y", linestyle="dashed")
             x_ticks.append(d)
-        if row.sunset and sunrise_sunset:
+        if row.sunset and show_sunrise_sunset:
             d = arrow.get(row.sunset).datetime
             plt.axvline(d, c="y", linestyle="dashed")
             x_ticks.append(d)
+        if show_current_time:
+            d = arrow.now(tz).datetime
+            if start_date < d < end_date:
+                plt.axvline(d, c="k", linestyle="dashed")
+                x_ticks.append(d)
 
     ax1.set_xticks(sorted(list(set(x_ticks))))
     ax1.xaxis.set_major_formatter(
@@ -238,8 +249,8 @@ def get_tides_for_station_between_dates_as_csv(
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
-        [1.5, 2],
-        description="Max tide windows to consider in meters",
+        [],
+        description="Tide windows to find (in meters)",
     ),
     excel_date_format: bool = Query(
         False,
@@ -287,8 +298,8 @@ def get_tides_for_station_between_dates(
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
-        [1.5, 2],
-        description="Max tide windows to consider in meters",
+        [],
+        description="Tide windows to find (in meters)",
     ),
 ) -> list[TideWindowRead]:
     try:
