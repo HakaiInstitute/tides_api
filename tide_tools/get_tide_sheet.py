@@ -3,8 +3,6 @@ from datetime import datetime
 import arrow
 import astral
 import astral.sun
-import polars as pl
-from matplotlib import pyplot as plt
 
 from tide_tools.lib import (
     get_station_by_name,
@@ -27,28 +25,27 @@ def hours_time_difference(t2: datetime, t1: datetime) -> str:
 
 
 def get_data_sheet(
-    station_name: str,
-    start_date: datetime,
-    end_date: datetime,
-    tz: str = "America/Vancouver",
-    plot: bool = False,
+        station_name: str,
+        start_date: datetime,
+        end_date: datetime,
+        tz: str = "America/Vancouver",
+        tide_windows: list[float] = None,
 ):
+    if tide_windows is None:
+        tide_windows = [1.5, 2.0]
     station = get_station_by_name(station_name)
     tides = get_tides_between_dates(station, start_date, end_date)
 
     high_tides, low_tides = get_hilo_tides(tides)
 
-    windows_2m = find_tide_windows(tides, 2)
-    windows_1p5m = find_tide_windows(tides, 1.5)
+    windows_xm = [find_tide_windows(tides, tw) for tw in tide_windows]
 
-    if len(low_tides) != len(windows_2m) and len(low_tides) and len(high_tides):
-        if high_tides[0][0] < low_tides[0][0]:
-            # Missing low tide in first partition, drop other partitions
-            windows_2m = windows_2m[1:]
-            windows_1p5m = windows_1p5m[1:]
+    if len(low_tides) and len(high_tides) and high_tides[0][0] < low_tides[0][0]:
+        # Missing low tide in first partition, drop other partitions
+        windows_xm = [w[1:] for w in windows_xm]
 
     sheet = []
-    for lt, w2, w1p5 in zip(low_tides, windows_2m, windows_1p5m):
+    for i, lt in enumerate(low_tides):
         date = arrow.get(lt[0]).to(tz).date()
 
         obs = astral.Observer(station.latitude, station.longitude)
@@ -65,59 +62,50 @@ def get_data_sheet(
         except ValueError:
             sunset = None
 
-        sheet.append(
-            {
-                "low_tide_date": date,
-                "low_tide_height_m": round(float(lt[1]), 2),
-                "low_tide_time": format_time(lt[0], tz),
-                "sunrise": format_time(sunrise, tz),
-                "noon": format_time(noon, tz),
-                "sunset": format_time(sunset, tz),
-                "window_start_2m": format_time(w2[0], tz),
-                "window_start_1p5m": format_time(w1p5[0], tz),
-                "window_end_1p5m": format_time(w1p5[1], tz),
-                "window_end_2m": format_time(w2[1], tz),
-                "hours_under_1p5m": hours_time_difference(w1p5[1], w1p5[0]),
-                "hours_under_2m": hours_time_difference(w2[1], w2[0]),
-            }
+        row = dict(
+            low_tide_date=date,
+            low_tide_height_m=round(float(lt[1]), 2),
+            low_tide_time=format_time(lt[0], tz),
+            sunrise=format_time(sunrise, tz),
+            noon=format_time(noon, tz),
+            sunset=format_time(sunset, tz),
+            windows=dict(
+                (
+                    f"{wk}m",
+                    dict(
+                        start=format_time(wvi[i][0], tz),
+                        end=format_time(wvi[i][1], tz),
+                        hours=hours_time_difference(wvi[i][1], wvi[i][0]),
+                    ),
+                )
+                for wk, wvi in zip(tide_windows, windows_xm)
+            ),
         )
-
-    if plot:
-        fig = plt.figure()
-        ax1 = fig.subplots()
-        ax1.grid(axis="y")
-        # tilt x labels
-        plt.xticks(rotation=30)
-
-        plt.plot([t.eventDate for t in tides], [t.value for t in tides], c="gray")
-        # ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: ts2time(x)))
-        for lt in low_tides:
-            plt.axvline(lt[0], c="r", linestyle="dotted")
-
-        # plt.axhline(2, c='b', linestyle='dotted')
-        for ws, we in windows_2m:
-            if ws:
-                plt.axvline(ws, c="b", linestyle="dotted")
-            if we:
-                plt.axvline(we, c="b", linestyle="dotted")
-
-        # plt.axhline(1.5, c='g', linestyle='dotted')
-        for ws, we in windows_1p5m:
-            if ws:
-                plt.axvline(ws, c="g", linestyle="dotted")
-            if we:
-                plt.axvline(we, c="g", linestyle="dotted")
-
-        plt.show()
+        sheet.append(row)
 
     return sheet, tides
 
 
+def expand_windows(sheet):
+    for row in sheet:
+        for k, v in row["windows"].items():
+            row[f"window_start_{k}"] = v["start"]
+            row[f"window_end_{k}"] = v["end"]
+            row[f"hours_under_{k}"] = v["hours"]
+        del row["windows"]
+    return sheet
+
+
 if __name__ == "__main__":
-    sheet = get_data_sheet(
-        "Adams Harbour", datetime(2024, 6, 1), datetime(2024, 6, 5), plot=True
+    import polars as pl
+
+    sheet, _ = get_data_sheet(
+        "Adams Harbour",
+        datetime(2024, 6, 1),
+        datetime(2024, 6, 5),
+        tide_windows=[1.5, 2.0],
     )
-    df = pl.DataFrame(sheet)
+    df = pl.DataFrame(expand_windows(sheet))
     print(df)
 
     # print(len(high_tides), len(low_tides), len(windows_2m), len(windows_1p5m))

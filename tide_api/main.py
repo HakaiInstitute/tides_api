@@ -12,10 +12,10 @@ import polars as pl
 from fastapi import FastAPI, HTTPException
 from fastapi.params import Path, Query
 from fastapi.responses import RedirectResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 from starlette.responses import Response
-
-from tide_tools.get_tide_sheet import get_data_sheet
+import polars.selectors as cs
+from tide_tools.get_tide_sheet import get_data_sheet, expand_windows
 from tide_tools.lib import get_station_options
 
 app = FastAPI(
@@ -72,6 +72,12 @@ class StationRead(BaseModel):
     longitude: float
 
 
+class Window(BaseModel):
+    start: Optional[datetime]
+    end: Optional[datetime]
+    hours: Optional[float]
+
+
 class TideWindowRead(BaseModel):
     low_tide_date: date
     low_tide_height_m: float
@@ -79,12 +85,21 @@ class TideWindowRead(BaseModel):
     sunrise: Optional[datetime]
     noon: Optional[datetime]
     sunset: Optional[datetime]
-    window_start_2m: Optional[datetime]
-    window_start_1p5m: Optional[datetime]
-    window_end_1p5m: Optional[datetime]
-    window_end_2m: Optional[datetime]
-    hours_under_1p5m: Optional[float]
-    hours_under_2m: Optional[float]
+    windows: dict[str, Window] = {}
+
+
+def make_tide_window_schema(tide_window: list[float]):
+    window_fields = []
+    for tw in tide_window:
+        window_fields.extend(
+            [
+                (f"window_start_{tw}m".replace(".", "_"), (Optional[datetime], ...)),
+                (f"window_end_{tw}m".replace(".", "_"), (Optional[datetime], ...)),
+                (f"hours_under_{tw}m".replace(".", "_"), (Optional[float], ...)),
+            ]
+        )
+    window_fields = dict(window_fields)
+    return create_model("TideWindowRead", __base__=TideWindowRead, **window_fields)
 
 
 @app.get("/", include_in_schema=False)
@@ -116,7 +131,8 @@ def get_tides(
     station_name: StationName,
     start_date: datetime,
     end_date: datetime,
-    tz: Optional[str] = Query("America/Vancouver"),
+    tz: Optional[str] = "America/Vancouver",
+    tide_window: list[float] = [1.5, 2],
 ):
     start_date = arrow.get(start_date, tz).datetime
     end_date = arrow.get(end_date, tz).datetime
@@ -124,7 +140,7 @@ def get_tides(
     if end_date <= start_date:
         raise ValueError("End date must be after start date")
 
-    return get_data_sheet(station_name.value, start_date, end_date, tz)
+    return get_data_sheet(station_name.value, start_date, end_date, tz, tide_window)
 
 
 @app.get("/tides/{station_name}.png", tags=["Tides"])
@@ -134,14 +150,21 @@ def graph_24h_tide_for_station_on_date(
         ...,
         description="The start date and time to plot in ISO8601 format",
         openapi_examples=iso8601_start_examples,
+        default_factory=lambda: datetime.now().date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [1.5, 2],
+        description="Tide windows of interest, in meters",
+    ),
+    sunrise_sunset: bool = Query(True, description="Show sunrise and sunset times"),
 ):
     start_date = arrow.get(date, tz).datetime
     end_date = start_date + timedelta(days=1)
-    sheet, tides = get_tides(station_name, start_date, end_date, tz)
+    sheet, tides = get_tides(station_name, start_date, end_date, tz, tide_window)
     if isinstance(sheet, HTTPException):
         raise sheet
+    sheet = [TideWindowRead.parse_obj(t) for t in sheet]
 
     fig = plt.figure()
     ax1 = fig.subplots()
@@ -161,31 +184,26 @@ def graph_24h_tide_for_station_on_date(
 
     x_ticks = []
     for row in sheet:
-        d = arrow.get(row["low_tide_time"]).datetime
+        d = arrow.get(row.low_tide_time).datetime
         plt.axvline(d, c="r", linestyle="dotted")
         x_ticks.append(d)
-        if row["window_start_2m"]:
-            d = arrow.get(row["window_start_2m"]).datetime
-            plt.axvline(d, c="b", linestyle="dotted")
-            x_ticks.append(d)
-        if row["window_end_2m"]:
-            d = arrow.get(row["window_end_2m"]).datetime
-            plt.axvline(d, c="b", linestyle="dotted")
-            x_ticks.append(d)
-        if row["window_start_1p5m"]:
-            d = arrow.get(row["window_start_1p5m"]).datetime
-            plt.axvline(d, c="g", linestyle="dotted")
-            x_ticks.append(d)
-        if row["window_end_1p5m"]:
-            d = arrow.get(row["window_end_1p5m"]).datetime
-            plt.axvline(d, c="g", linestyle="dotted")
-            x_ticks.append(d)
-        if row["sunrise"]:
-            d = arrow.get(row["sunrise"]).datetime
+        for i, (wk, wv) in enumerate(row.windows.items()):
+            c = ["b", "g", "c", "m", "k"][i % 5]
+            ws, we = wv.start, wv.end
+            if ws:
+                d = arrow.get(ws).datetime
+                plt.axvline(d, c=c, linestyle="dotted")
+                x_ticks.append(d)
+            if we:
+                d = arrow.get(we).datetime
+                plt.axvline(d, c=c, linestyle="dotted")
+                x_ticks.append(d)
+        if row.sunrise and sunrise_sunset:
+            d = arrow.get(row.sunrise).datetime
             plt.axvline(d, c="y", linestyle="dashed")
             x_ticks.append(d)
-        if row["sunset"]:
-            d = arrow.get(row["sunset"]).datetime
+        if row.sunset and sunrise_sunset:
+            d = arrow.get(row.sunset).datetime
             plt.axvline(d, c="y", linestyle="dashed")
             x_ticks.append(d)
 
@@ -217,56 +235,29 @@ def get_tides_for_station_between_dates_as_csv(
         openapi_examples=iso8601_end_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [1.5, 2],
+        description="Max tide windows to consider in meters",
+    ),
     excel_date_format: bool = Query(
         False,
         description="Export dates in Excel decimal format instead of ISO8601 strings",
     ),
 ):
-    sheet, _ = get_tides(station_name, start_date, end_date, tz)
-    df = pl.DataFrame(sheet)
+    sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
+    if isinstance(sheet, HTTPException):
+        raise sheet
+
+    df = pl.DataFrame(expand_windows(sheet))
     if excel_date_format:
+        # Convert date time fields
         df = df.with_columns(
             [
-                pl.col("low_tide_time")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("sunrise")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("noon")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("sunset")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("window_start_2m")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("window_start_1p5m")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("window_end_1p5m")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
-                pl.col("window_end_2m")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569),
+                cs.matches("low_tide_time|sunrise|noon|sunset|window_.*")
+                    .cast(pl.Datetime)
+                    .dt.timestamp(time_unit="ms")
+                    .truediv(24 * 60 * 60 * 1000)
+                    .add(25569)
             ]
         )
 
@@ -291,9 +282,13 @@ def get_tides_for_station_between_dates(
         openapi_examples=iso8601_end_examples,
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [1.5, 2],
+        description="Max tide windows to consider in meters",
+    ),
 ) -> list[TideWindowRead]:
     try:
-        sheet, _ = get_tides(station_name, start_date, end_date, tz)
+        sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     sheet = [TideWindowRead.parse_obj(t) for t in sheet]
