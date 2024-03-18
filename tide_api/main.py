@@ -228,11 +228,13 @@ def get_tides_for_station_between_dates_as_csv(
         ...,
         description="The start date in ISO8601 format",
         openapi_examples=iso8601_start_examples,
+        default_factory=lambda: datetime.now().date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
         openapi_examples=iso8601_end_examples,
+        default_factory=lambda: (datetime.now() + timedelta(weeks=4)).date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
@@ -275,11 +277,13 @@ def get_tides_for_station_between_dates(
         ...,
         description="The start date in ISO8601 format",
         openapi_examples=iso8601_start_examples,
+        default_factory=lambda: datetime.now().date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
         openapi_examples=iso8601_end_examples,
+        default_factory=lambda: (datetime.now() + timedelta(weeks=4)).date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
