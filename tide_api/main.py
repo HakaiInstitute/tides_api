@@ -3,6 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
+from tide_api.consts import OPENAPI_TAGS
 from tide_api.routes import stations_router
 from tide_api.routes import tide_events_router
 from tide_api.routes import tides_router
@@ -14,20 +15,7 @@ app = FastAPI(
     "*Warning: This tool is in development. "
     "Results may not be accurate and URLs may change. Use at your own risk.*",
     root_path=os.getenv("ROOT_PATH", ""),
-    openapi_tags=[
-        {
-            "name": "Stations",
-            "description": "Get information about tide stations",
-        },
-        {
-            "name": "Tide Events",
-            "description": "Get tide events for a given station",
-        },
-        {
-            "name": "Tides",
-            "description": "Get tides for a given station",
-        },
-    ],
+    openapi_tags=OPENAPI_TAGS,
     contact={"name": "Hakai API Support", "email": "api.support@hakai.org"},
 )
 

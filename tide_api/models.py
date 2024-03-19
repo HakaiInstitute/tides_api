@@ -1,41 +1,49 @@
-import enum
 from datetime import datetime, date
 from typing import Optional
 
-import arrow
-from pydantic import BaseModel
-from starlette.responses import Response, PlainTextResponse
-
-from tide_tools.lib import get_station_options
+from pydantic import BaseModel, Field, computed_field
 
 
 class StationBase(BaseModel):
-    name: str
+    name: str = Field(..., validation_alias="officialName")
 
 
-class StationRead(StationBase):
+class Station(StationBase):
     latitude: float
     longitude: float
 
 
-class StationReadWithoutCoords(StationBase):
+class StationWithoutCoords(StationBase):
     pass
 
 
-class Window(BaseModel):
+class FullStation(Station):
+    id: str
+    code: str
+    type: str
+    time_series: list["TimeSeries"] = Field(..., validation_alias="timeSeries")
+
+
+class TideWindow(BaseModel):
     start: Optional[datetime]
     end: Optional[datetime]
-    hours: Optional[float]
+
+    @computed_field
+    @property
+    def hours(self) -> float | None:
+        if self.start is None or self.end is None:
+            return None
+        return round((self.end - self.start).seconds / 60 / 60, 2)
 
 
-class TideWindowRead(BaseModel):
+class TideEvent(BaseModel):
     low_tide_date: date
     low_tide_height_m: float
     low_tide_time: datetime
     sunrise: Optional[datetime]
     noon: Optional[datetime]
     sunset: Optional[datetime]
-    windows: dict[str, Window] = {}
+    windows: dict[str, TideWindow] = {}
 
     model_config = {
         "json_schema_extra": {
@@ -60,77 +68,31 @@ class TideWindowRead(BaseModel):
                                 "hours": 6.22,
                             },
                         },
-                    },
-                    {
-                        "low_tide_date": "2024-08-01",
-                        "low_tide_height_m": 0.45,
-                        "low_tide_time": "2024-08-01T22:20:00-07:00",
-                        "sunrise": "2024-08-01T02:13:11-07:00",
-                        "noon": "2024-08-01T09:29:37-07:00",
-                        "sunset": "2024-08-01T16:45:16-07:00",
-                        "windows": {
-                            "1.5m": {
-                                "start": "2024-08-01T19:46:04-07:00",
-                                "end": "2024-08-02T01:18:51-07:00",
-                                "hours": 5.55,
-                            },
-                            "2.0m": {
-                                "start": "2024-08-01T19:09:23-07:00",
-                                "end": "2024-08-02T02:09:45-07:00",
-                                "hours": 7.01,
-                            },
-                        },
-                    },
+                    }
                 ]
             ]
         }
     }
 
 
-class TideRead(BaseModel):
-    time: datetime
+class TimeSeries(BaseModel):
+    id: str
+    code: str
+    name_en: str = Field(..., validation_alias="nameEn")
+    name_fr: str = Field(..., validation_alias="nameFr")
+    phenomenon_id: str = Field(..., validation_alias="phenomenonId")
+    owner: str
+
+
+class TideMeasurementBase(BaseModel):
+    time: datetime = Field(..., validation_alias="eventDate")
     value: float
 
-    @classmethod
-    def from_chs_obj(cls, obj):
-        return cls(time=arrow.get(obj.eventDate).datetime, value=obj.value)
+
+class TideMeasurement(TideMeasurementBase):
+    pass
 
 
-class PNGResponse(Response):
-    media_type = "image/png"
-
-
-class CSVResponse(PlainTextResponse):
-    media_type = "text/csv"
-
-
-stations = list(
-    filter(
-        lambda s: any([t.code == "wlp" for t in s.timeSeries]),
-        sorted(get_station_options(), key=lambda s: s.officialName),
-    )
-)
-station_names = [s.officialName for s in stations]
-StationName = enum.Enum("StationName", dict([(s, s) for s in sorted(station_names)]))
-
-
-iso8601_start_examples = {
-    "date": {
-        "summary": "Date (August 1, 2024)",
-        "value": "2024-08-01",
-    },
-    "datetime": {
-        "summary": "Date with time (August 1, 2024 at 1:30 PM)",
-        "value": "2024-08-01T13:30:00",
-    },
-}
-iso8601_end_examples = {
-    "date": {
-        "summary": "Date (August 3, 2024)",
-        "value": "2024-08-03",
-    },
-    "datetime": {
-        "summary": "Date with time (August 3, 2024 at 1:30 PM)",
-        "value": "2024-08-03T13:30:00",
-    },
-}
+class FullTideMeasurement(TideMeasurementBase):
+    qc_flag_code: int = Field(..., validation_alias="qcFlagCode")
+    time_series_id: str = Field(..., validation_alias="timeSeriesId")
