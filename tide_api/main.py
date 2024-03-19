@@ -204,19 +204,19 @@ def graph_24h_tide_for_station_on_date(
                 d = arrow.get(we).datetime
                 plt.axvline(d, c=c, linestyle="dotted")
                 x_ticks.append(d)
-        if row.sunrise and show_sunrise_sunset:
-            d = arrow.get(row.sunrise).datetime
-            plt.axvline(d, c="y", linestyle="dashed")
+    if row.sunrise and show_sunrise_sunset:
+        d = arrow.get(row.sunrise).datetime
+        plt.axvline(d, c="y", linestyle="dashed")
+        x_ticks.append(d)
+    if row.sunset and show_sunrise_sunset:
+        d = arrow.get(row.sunset).datetime
+        plt.axvline(d, c="y", linestyle="dashed")
+        x_ticks.append(d)
+    if show_current_time:
+        d = arrow.now(tz).datetime
+        if start_date < d < end_date:
+            plt.axvline(d, c="k", linestyle="dashed")
             x_ticks.append(d)
-        if row.sunset and show_sunrise_sunset:
-            d = arrow.get(row.sunset).datetime
-            plt.axvline(d, c="y", linestyle="dashed")
-            x_ticks.append(d)
-        if show_current_time:
-            d = arrow.now(tz).datetime
-            if start_date < d < end_date:
-                plt.axvline(d, c="k", linestyle="dashed")
-                x_ticks.append(d)
 
     ax1.set_xticks(sorted(list(set(x_ticks))))
     ax1.xaxis.set_major_formatter(
