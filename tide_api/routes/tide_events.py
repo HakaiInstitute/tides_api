@@ -9,15 +9,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.params import Path, Query
 from matplotlib import pyplot as plt, dates as mdates
 from polars import selectors as cs
+
+from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES
+from tide_api.lib import get_data_sheet, expand_windows
 from tide_api.models import (
-    StationName,
-    PNGResponse,
-    TideWindowRead,
-    CSVResponse,
-    iso8601_start_examples,
-    iso8601_end_examples,
+    TideEvent,
 )
-from tide_tools.get_tide_sheet import get_data_sheet, expand_windows
+from tide_api.responses import PNGResponse, CSVResponse
+from tide_api.stations import StationName
 
 router = APIRouter(
     prefix="/tides/events",
@@ -62,7 +61,7 @@ def graph_24h_tide_for_station_on_date(
     date: datetime = Query(
         ...,
         description="The start date and time to plot in ISO8601 format",
-        openapi_examples=iso8601_start_examples,
+        openapi_examples=ISO8601_START_EXAMPLES,
         default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
@@ -83,7 +82,7 @@ def graph_24h_tide_for_station_on_date(
     sheet, tides = get_tides(station_name, start_date, end_date, tz, tide_window)
     if isinstance(sheet, HTTPException):
         raise sheet
-    sheet = [TideWindowRead.parse_obj(t) for t in sheet]
+    sheet = [TideEvent.parse_obj(t) for t in sheet]
 
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax1 = fig.subplots()
@@ -94,7 +93,7 @@ def graph_24h_tide_for_station_on_date(
     plt.xlabel("Time")
 
     plt.plot(
-        [arrow.get(t.eventDate, tz).datetime for t in tides],
+        [arrow.get(t.time, tz).datetime for t in tides],
         [t.value for t in tides],
         c="gray",
     )
@@ -170,13 +169,13 @@ def get_tides_for_station_between_dates_as_csv(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        openapi_examples=iso8601_start_examples,
+        openapi_examples=ISO8601_START_EXAMPLES,
         default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        openapi_examples=iso8601_end_examples,
+        openapi_examples=ISO8601_END_EXAMPLES,
         default_factory=lambda: (
             arrow.now("America/Vancouver") + timedelta(weeks=4)
         ).date(),
@@ -208,14 +207,13 @@ def get_tides_for_station_between_dates_as_csv(
             ]
         )
 
-    with io.BytesIO() as f:
-        df.write_csv(f)
-        csv = f.getvalue()
-
+    fname_station = station_name.value.lower().replace(" ", "_")
+    fname_range = f"{start_date.date()}_to_{end_date.date()}"
     return CSVResponse(
-        content=csv,
+        content=df.to_pandas().to_csv(index=False),
         headers={
-            "Content-Disposition": f"attachment; filename={station_name}_{start_date.isoformat()}_to_{end_date.isoformat()}.csv"
+            "Content-Disposition": f"attachment; "
+                                   f"filename={fname_station}_tides_{fname_range}.csv"
         },
     )
 
@@ -226,13 +224,13 @@ def get_tides_for_station_between_dates(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        openapi_examples=iso8601_start_examples,
+        openapi_examples=ISO8601_START_EXAMPLES,
         default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        openapi_examples=iso8601_end_examples,
+        openapi_examples=ISO8601_END_EXAMPLES,
         default_factory=lambda: (
             arrow.now("America/Vancouver") + timedelta(weeks=4)
         ).date(),
@@ -242,10 +240,10 @@ def get_tides_for_station_between_dates(
         [],
         description="Tide windows to find (in meters)",
     ),
-) -> list[TideWindowRead]:
+) -> list[TideEvent]:
     try:
         sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    sheet = [TideWindowRead.parse_obj(t) for t in sheet]
+    sheet = [TideEvent.parse_obj(t) for t in sheet]
     return sheet

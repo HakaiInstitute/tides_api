@@ -3,13 +3,12 @@ from datetime import datetime
 import arrow
 from fastapi import APIRouter, Query
 
+from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES
+from tide_api.lib import StationTides
 from tide_api.models import (
-    StationName,
-    iso8601_start_examples,
-    iso8601_end_examples,
-    TideRead,
+    TideMeasurement,
 )
-from tide_tools.lib import get_tides_between_dates, get_station_by_name
+from tide_api.stations import StationName
 
 router = APIRouter(
     prefix="/tides",
@@ -23,17 +22,18 @@ def get_tides_for_station(
     start_date: datetime = Query(
         ...,
         description="The start date in ISO8601 format",
-        openapi_examples=iso8601_start_examples,
+        openapi_examples=ISO8601_START_EXAMPLES,
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
-        openapi_examples=iso8601_end_examples,
+        openapi_examples=ISO8601_END_EXAMPLES,
     ),
     tz: str = Query("America/Vancouver", description="The timezone to use"),
-) -> list[TideRead]:
-    start_date = arrow.get(start_date, tz).datetime
-    end_date = arrow.get(end_date, tz).datetime
-    station = get_station_by_name(station_name.value)
-    tides = get_tides_between_dates(station, start_date, end_date)
-    return list(map(TideRead.from_chs_obj, tides))
+) -> list[TideMeasurement]:
+    station_tides = StationTides.from_name(
+        station_name.value,
+        start_date=arrow.get(start_date, tz).datetime,
+        end_date=arrow.get(end_date, tz).datetime,
+    )
+    return list(map(TideMeasurement.parse_obj, station_tides.tides))
