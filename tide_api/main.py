@@ -36,7 +36,7 @@ app = FastAPI(
             "description": "Get tide events by date or date range for a given station",
         },
     ],
-    contact={"name": "Hakai Technical Team", "email": "taylor.denouden@hakai.org"},
+    contact={"name": "Hakai Technical Team", "email": "api.support@hakai.org"},
 )
 stations = list(
     filter(
