@@ -2,8 +2,7 @@ from fastapi import APIRouter
 from fastapi.params import Query
 from fastapi.responses import HTMLResponse
 
-import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 
 from tide_api.models import StationRead, StationReadWithoutCoords, stations, StationName
 
@@ -27,15 +26,25 @@ def list_stations(
 
 @router.get("/map")
 def show_map()  -> HTMLResponse:
-    df = pd.DataFrame([s.dict() for s in stations])
-    fig = px.scatter_mapbox(
-        df,
-        lat="latitude",
-        lon="longitude",
-        hover_name="officialName",
-        hover_data=["tides"],
-        zoom=2,
+    
+    name,latitude,longitude = [],[],[]
+    for station in stations:
+        name.append(station.officialName)
+        latitude.append(station.latitude)
+        longitude.append(station.longitude)
+
+    fig = go.Figure(go.Scattermapbox(
+            lat=latitude,
+            lon=longitude,
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=9
+            ),
+            text=name,
+            name="CHS Tide Stations"
+        )
     )
+
     fig.update_layout(mapbox_style="open-street-map")
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     return HTMLResponse(fig.to_html(include_plotlyjs="cdn"))
