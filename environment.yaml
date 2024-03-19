@@ -13,3 +13,5 @@ dependencies:
   - astral<3
   - uvicorn
   - fastapi
+  - plotly
+  - pandas
