@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 import arrow
 import astral
@@ -6,7 +6,13 @@ import astral.sun
 import requests
 from scipy.interpolate import InterpolatedUnivariateSpline
 
-from tide_api.models import FullStation, FullTideMeasurement, TideWindow
+from tide_api.models import (
+    FullStation,
+    FullTideMeasurement,
+    TideWindow,
+    TideMeasurement,
+    TideEvent,
+)
 from tide_api.stations import get_station_by_name
 
 
@@ -29,36 +35,36 @@ class StationTides:
         return cls(get_station_by_name(station_name), *args, **kwargs)
 
     @property
-    def tides(self):
+    def tides(self) -> list[FullTideMeasurement]:
         if self._tides is None:
             self._tides = self._get_tides()
         return self._tides
 
     @property
-    def timestamps(self):
+    def timestamps(self) -> list[float]:
         return [arrow.get(d.time).timestamp() for d in self.tides]
 
     @property
-    def heights(self):
+    def heights(self) -> list[float]:
         return [d.value for d in self.tides]
 
     @property
-    def high_tides(self):
+    def high_tides(self) -> list[TideMeasurement]:
         if self._high_tides is None:
             self._high_tides, self._low_tides = self._get_hilo_tides()
         return self._high_tides
 
     @property
-    def low_tides(self):
+    def low_tides(self) -> list[TideMeasurement]:
         if self._low_tides is None:
             self._high_tides, self._low_tides = self._get_hilo_tides()
         return self._low_tides
 
     @property
-    def _low_tide_partitions(self):
-        return split_tides_by_datetimes(self.tides, [t[0] for t in self.high_tides])
+    def _low_tide_partitions(self) -> list[list[FullTideMeasurement]]:
+        return split_tides_by_datetimes(self.tides, [t.time for t in self.high_tides])
 
-    def _get_hilo_tides(self):
+    def _get_hilo_tides(self) -> tuple[list[TideMeasurement], list[TideMeasurement]]:
         f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=4)
         fp = f.derivative()
         rts = fp.roots()
@@ -71,12 +77,12 @@ class StationTides:
         ]
 
         low_tides = [
-            (t, h)
+            TideMeasurement(time=t, value=h)
             for t, h, is_low in zip(hilo_datetimes, hilo_heights, is_low_tide)
             if is_low
         ]
         high_tides = [
-            (t, h)
+            TideMeasurement(time=t, value=h)
             for t, h, is_low in zip(hilo_datetimes, hilo_heights, is_low_tide)
             if not is_low
         ]
@@ -165,23 +171,68 @@ class StationTides:
     def _observer(self) -> astral.Observer:
         return astral.Observer(self.station.latitude, self.station.longitude)
 
-    def get_sunrise(self, date: datetime) -> datetime | None:
+    def get_sunrise(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.sunrise(self._observer, date)
+            return astral.sun.sunrise(self._observer, date_)
         except ValueError:
             return None
 
-    def get_noon(self, date: datetime) -> datetime | None:
+    def get_noon(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.noon(self._observer, date)
+            return astral.sun.noon(self._observer, date_)
         except ValueError:
             return None
 
-    def get_sunset(self, date: datetime) -> datetime | None:
+    def get_sunset(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.sunset(self._observer, date)
+            return astral.sun.sunset(self._observer, date_)
         except ValueError:
             return None
+
+    def low_tide_events(
+        self,
+        tz: str = "America/Vancouver",
+        tide_windows: list[float] = None,
+    ) -> list[TideEvent]:
+        if tide_windows is None:
+            tide_windows = []
+        windows_xm = list(map(self.detect_tide_windows, tide_windows))
+
+        low_tides = self.low_tides
+        high_tides = self.high_tides
+
+        if (
+            len(low_tides)
+            and len(high_tides)
+            and high_tides[0].time < low_tides[0].time
+        ):
+            # Missing low tide in first partition, drop other partitions
+            windows_xm = [w[1:] for w in windows_xm]
+
+        events = []
+        for i, lt in enumerate(low_tides):
+            date_ = arrow.get(lt.time).to(tz).date()
+            row = dict(
+                low_tide_date=date_,
+                low_tide_height_m=round(float(lt.value), 2),
+                low_tide_time=format_time(lt.time, tz),
+                sunrise=format_time(self.get_sunrise(date_), tz),
+                noon=format_time(self.get_noon(date_), tz),
+                sunset=format_time(self.get_sunset(date_), tz),
+                windows=dict(
+                    (
+                        f"{wk}m",
+                        dict(
+                            start=format_time(wvi[i].start, tz),
+                            end=format_time(wvi[i].end, tz),
+                            hours=wvi[i].hours,
+                        ),
+                    )
+                    for wk, wvi in zip(tide_windows, windows_xm)
+                ),
+            )
+            events.append(TideEvent.parse_obj(row))
+        return events
 
 
 def split_tides_by_datetimes(
@@ -213,59 +264,8 @@ def format_time(datetime, tz="America/Vancouver") -> str | None:
     return arrow.get(datetime).to(tz).isoformat(timespec="seconds")
 
 
-def get_data_sheet(
-    station_name: str,
-    start_date: datetime,
-    end_date: datetime,
-    tz: str = "America/Vancouver",
-    tide_windows: list[float] = None,
-):
-    if tide_windows is None:
-        tide_windows = []
-
-    station_tides = StationTides.from_name(station_name, start_date, end_date)
-    windows_xm = list(map(station_tides.detect_tide_windows, tide_windows))
-
-    if (
-        len(station_tides.low_tides)
-        and len(station_tides.high_tides)
-        and station_tides.high_tides[0][0] < station_tides.low_tides[0][0]
-    ):
-        # Missing low tide in first partition, drop other partitions
-        windows_xm = [w[1:] for w in windows_xm]
-
-    sheet = []
-    for i, lt in enumerate(station_tides.low_tides):
-        date = arrow.get(lt[0]).to(tz).date()
-        sunrise = station_tides.get_sunrise(date)
-        noon = station_tides.get_noon(date)
-        sunset = station_tides.get_sunset(date)
-
-        row = dict(
-            low_tide_date=date,
-            low_tide_height_m=round(float(lt[1]), 2),
-            low_tide_time=format_time(lt[0], tz),
-            sunrise=format_time(sunrise, tz),
-            noon=format_time(noon, tz),
-            sunset=format_time(sunset, tz),
-            windows=dict(
-                (
-                    f"{wk}m",
-                    dict(
-                        start=format_time(wvi[i].start, tz),
-                        end=format_time(wvi[i].end, tz),
-                        hours=wvi[i].hours,
-                    ),
-                )
-                for wk, wvi in zip(tide_windows, windows_xm)
-            ),
-        )
-        sheet.append(row)
-
-    return sheet, station_tides.tides
-
-
-def expand_windows(sheet):
+def expand_windows(sheet: list[TideEvent]) -> list[dict]:
+    sheet = [t.dict() for t in sheet]
     for row in sheet:
         for k, v in row["windows"].items():
             row[f"window_start_{k}"] = v["start"]
@@ -278,11 +278,11 @@ def expand_windows(sheet):
 if __name__ == "__main__":
     import polars as pl
 
-    sheet, _ = get_data_sheet(
+    station_tides = StationTides.from_name(
         "Adams Harbour",
         datetime(2024, 6, 1),
         datetime(2024, 6, 5),
-        tide_windows=[1.5, 2.0],
     )
-    df = pl.DataFrame(expand_windows(sheet))
+    events = station_tides.low_tide_events(tide_windows=[1.5, 2.0])
+    df = pl.DataFrame(expand_windows(events))
     print(df)

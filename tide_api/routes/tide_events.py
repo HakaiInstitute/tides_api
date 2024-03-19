@@ -1,17 +1,16 @@
 import io
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Any
 
 import arrow
 import dateutil.tz
 import polars as pl
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.params import Path, Query
 from matplotlib import pyplot as plt, dates as mdates
-from polars import selectors as cs
 
 from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES
-from tide_api.lib import get_data_sheet, expand_windows
+from tide_api.lib import expand_windows, StationTides
 from tide_api.models import (
     TideEvent,
 )
@@ -24,22 +23,22 @@ router = APIRouter(
 )
 
 
-def get_tides(
+def parse_tz_date(dt: Any, tz: str) -> datetime:
+    return arrow.get(dt, tz).datetime
+
+
+def get_station_tides(
     station_name: StationName,
     start_date: datetime,
     end_date: datetime,
     tz: Optional[str] = "America/Vancouver",
-    tide_window: list[float] = None,
 ):
-    if tide_window is None:
-        tide_window = []
-    start_date = arrow.get(start_date, tz).datetime
-    end_date = arrow.get(end_date, tz).datetime
+    start_date = parse_tz_date(start_date, tz)
+    end_date = parse_tz_date(end_date, tz)
 
-    if end_date <= start_date:
-        raise ValueError("End date must be after start date")
-
-    return get_data_sheet(station_name.value, start_date, end_date, tz, tide_window)
+    return StationTides.from_name(
+        station_name.value, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get(
@@ -64,7 +63,7 @@ def graph_24h_tide_for_station_on_date(
         openapi_examples=ISO8601_START_EXAMPLES,
         default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tz: str = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
         [],
         description="Tide windows of interest, in meters",
@@ -77,12 +76,11 @@ def graph_24h_tide_for_station_on_date(
     height: int = Query(480, description="Height of the plot in pixels"),
     dpi: int = Query(100, description="DPI of the plot"),
 ):
-    start_date = arrow.get(date, tz).datetime
+    start_date = parse_tz_date(date, tz)
     end_date = start_date + timedelta(days=1)
-    sheet, tides = get_tides(station_name, start_date, end_date, tz, tide_window)
-    if isinstance(sheet, HTTPException):
-        raise sheet
-    sheet = [TideEvent.parse_obj(t) for t in sheet]
+    station_tides = get_station_tides(station_name, start_date, end_date, tz)
+    sheet = station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
+    tides = station_tides.tides
 
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax1 = fig.subplots()
@@ -185,36 +183,20 @@ def get_tides_for_station_between_dates_as_csv(
         [],
         description="Tide windows to find (in meters)",
     ),
-    excel_date_format: bool = Query(
-        False,
-        description="Export dates in Excel decimal format instead of ISO8601 strings",
-    ),
 ):
-    sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
-    if isinstance(sheet, HTTPException):
-        raise sheet
-
+    station_tides = get_station_tides(station_name, start_date, end_date, tz)
+    sheet = station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
     df = pl.DataFrame(expand_windows(sheet))
-    if excel_date_format:
-        # Convert date time fields
-        df = df.with_columns(
-            [
-                cs.matches("low_tide_time|sunrise|noon|sunset|window_.*")
-                .cast(pl.Datetime)
-                .dt.timestamp(time_unit="ms")
-                .truediv(24 * 60 * 60 * 1000)
-                .add(25569)
-            ]
-        )
 
-    fname_station = station_name.value.lower().replace(" ", "_")
-    fname_range = f"{start_date.date()}_to_{end_date.date()}"
+    filename = (
+        f'{station_name.value.lower().replace(" ", "_")}'
+        f"_tides_"
+        f"{start_date.date()}_to_{end_date.date()}.csv"
+    )
+
     return CSVResponse(
         content=df.to_pandas().to_csv(index=False),
-        headers={
-            "Content-Disposition": f"attachment; "
-            f"filename={fname_station}_tides_{fname_range}.csv"
-        },
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -241,9 +223,5 @@ def get_tides_for_station_between_dates(
         description="Tide windows to find (in meters)",
     ),
 ) -> list[TideEvent]:
-    try:
-        sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    sheet = [TideEvent.parse_obj(t) for t in sheet]
-    return sheet
+    station_tides = get_station_tides(station_name, start_date, end_date, tz)
+    return station_tides.low_tide_events(tz=tz, tide_windows=tide_window)

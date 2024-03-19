@@ -1,11 +1,11 @@
 from datetime import datetime, date
 from typing import Optional
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, AliasChoices
 
 
 class StationBase(BaseModel):
-    name: str = Field(..., validation_alias="officialName")
+    name: str = Field(..., validation_alias=AliasChoices("name", "officialName"))
 
 
 class Station(StationBase):
@@ -85,7 +85,7 @@ class TimeSeries(BaseModel):
 
 
 class TideMeasurementBase(BaseModel):
-    time: datetime = Field(..., validation_alias="eventDate")
+    time: datetime = Field(..., validation_alias=AliasChoices("time", "eventDate"))
     value: float
 
 
