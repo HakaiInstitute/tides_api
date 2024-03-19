@@ -12,10 +12,10 @@ import polars as pl
 import polars.selectors as cs
 from fastapi import FastAPI, HTTPException
 from fastapi.params import Path, Query
-from fastapi.responses import RedirectResponse, PlainTextResponse
-from starlette.responses import Response
+from fastapi.responses import RedirectResponse
 
-from tide_api.models import StationRead, TideWindowRead, StationReadWithoutCoords
+from tide_api.models import StationRead, TideWindowRead, StationReadWithoutCoords, \
+    PNGResponse, CSVResponse
 from tide_tools.get_tide_sheet import get_data_sheet, expand_windows
 from tide_tools.lib import get_station_options
 
@@ -126,14 +126,10 @@ def get_tides(
     return get_data_sheet(station_name.value, start_date, end_date, tz, tide_window)
 
 
-class PNGReponse(Response):
-    media_type = "image/png"
-
-
 @app.get(
     "/tides/events/{station_name}.png",
     tags=["Tides"],
-    response_class=PNGReponse,
+    response_class=PNGResponse,
     responses={
         200: {
             "description": "PNG image of tide events",
@@ -230,11 +226,7 @@ def graph_24h_tide_for_station_on_date(
         buf.seek(0)
         png = buf.getvalue()
 
-    return PNGReponse(content=png)
-
-
-class CSVResponse(PlainTextResponse):
-    media_type = "text/csv"
+    return PNGResponse(content=png)
 
 
 @app.get(

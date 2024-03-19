@@ -2,6 +2,7 @@ from datetime import datetime, date
 from typing import Optional
 
 from pydantic import BaseModel
+from starlette.responses import Response, PlainTextResponse
 
 
 class StationBase(BaseModel):
@@ -120,3 +121,11 @@ class TideWindowRead(BaseModel):
             ]
         }
     }
+
+
+class PNGResponse(Response):
+    media_type = "image/png"
+
+
+class CSVResponse(PlainTextResponse):
+    media_type = "text/csv"
