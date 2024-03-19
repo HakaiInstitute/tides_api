@@ -1,8 +1,12 @@
+import enum
 from datetime import datetime, date
 from typing import Optional
 
+import arrow
 from pydantic import BaseModel
 from starlette.responses import Response, PlainTextResponse
+
+from tide_tools.lib import get_station_options
 
 
 class StationBase(BaseModel):
@@ -77,50 +81,19 @@ class TideWindowRead(BaseModel):
                             },
                         },
                     },
-                    {
-                        "low_tide_date": "2024-08-02",
-                        "low_tide_height_m": 0.79,
-                        "low_tide_time": "2024-08-02T10:28:25-07:00",
-                        "sunrise": "2024-08-02T02:14:16-07:00",
-                        "noon": "2024-08-02T09:29:33-07:00",
-                        "sunset": "2024-08-02T16:44:02-07:00",
-                        "windows": {
-                            "1.5m": {
-                                "start": "2024-08-02T08:16:50-07:00",
-                                "end": "2024-08-02T12:53:23-07:00",
-                                "hours": 4.61,
-                            },
-                            "2.0m": {
-                                "start": "2024-08-02T07:31:10-07:00",
-                                "end": "2024-08-02T13:43:07-07:00",
-                                "hours": 6.2,
-                            },
-                        },
-                    },
-                    {
-                        "low_tide_date": "2024-08-02",
-                        "low_tide_height_m": 0.4,
-                        "low_tide_time": "2024-08-02T23:16:54-07:00",
-                        "sunrise": "2024-08-02T02:14:16-07:00",
-                        "noon": "2024-08-02T09:29:33-07:00",
-                        "sunset": "2024-08-02T16:44:02-07:00",
-                        "windows": {
-                            "1.5m": {
-                                "start": "2024-08-02T20:40:40-07:00",
-                                "end": None,
-                                "hours": None,
-                            },
-                            "2.0m": {
-                                "start": "2024-08-02T20:05:13-07:00",
-                                "end": None,
-                                "hours": None,
-                            },
-                        },
-                    },
                 ]
             ]
         }
     }
+
+
+class TideRead(BaseModel):
+    time: datetime
+    value: float
+
+    @classmethod
+    def from_chs_obj(cls, obj):
+        return cls(time=arrow.get(obj.eventDate).datetime, value=obj.value)
 
 
 class PNGResponse(Response):
@@ -129,3 +102,35 @@ class PNGResponse(Response):
 
 class CSVResponse(PlainTextResponse):
     media_type = "text/csv"
+
+
+stations = list(
+    filter(
+        lambda s: any([t.code == "wlp" for t in s.timeSeries]),
+        sorted(get_station_options(), key=lambda s: s.officialName),
+    )
+)
+station_names = [s.officialName for s in stations]
+StationName = enum.Enum("StationName", dict([(s, s) for s in sorted(station_names)]))
+
+
+iso8601_start_examples = {
+    "date": {
+        "summary": "Date (August 1, 2024)",
+        "value": "2024-08-01",
+    },
+    "datetime": {
+        "summary": "Date with time (August 1, 2024 at 1:30 PM)",
+        "value": "2024-08-01T13:30:00",
+    },
+}
+iso8601_end_examples = {
+    "date": {
+        "summary": "Date (August 3, 2024)",
+        "value": "2024-08-03",
+    },
+    "datetime": {
+        "summary": "Date with time (August 3, 2024 at 1:30 PM)",
+        "value": "2024-08-03T13:30:00",
+    },
+}
