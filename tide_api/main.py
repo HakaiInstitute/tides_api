@@ -21,6 +21,7 @@ from tide_tools.lib import get_station_options
 
 app = FastAPI(
     title="Tide Window API",
+    version="0.1.0alpha",
     description="API to get tide windows for a given station between two dates. "
                 ""
                 ""
