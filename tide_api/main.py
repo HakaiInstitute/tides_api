@@ -152,7 +152,7 @@ def graph_24h_tide_for_station_on_date(
         ...,
         description="The start date and time to plot in ISO8601 format",
         openapi_examples=iso8601_start_examples,
-        default_factory=lambda: arrow.now().date(),
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
@@ -239,13 +239,13 @@ def get_tides_for_station_between_dates_as_csv(
         ...,
         description="The start date in ISO8601 format",
         openapi_examples=iso8601_start_examples,
-        default_factory=lambda: arrow.now().date(),
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
         openapi_examples=iso8601_end_examples,
-        default_factory=lambda: (arrow.now() + timedelta(weeks=4)).date(),
+        default_factory=lambda: (arrow.now("America/Vancouver") + timedelta(weeks=4)).date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
@@ -288,13 +288,13 @@ def get_tides_for_station_between_dates(
         ...,
         description="The start date in ISO8601 format",
         openapi_examples=iso8601_start_examples,
-        default_factory=lambda: arrow.now().date(),
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
     end_date: datetime = Query(
         ...,
         description="The end date in ISO8601 format",
         openapi_examples=iso8601_end_examples,
-        default_factory=lambda: (arrow.now() + timedelta(weeks=4)).date(),
+        default_factory=lambda: (arrow.now("America/Vancouver") + timedelta(weeks=4)).date(),
     ),
     tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
     tide_window: list[float] = Query(
