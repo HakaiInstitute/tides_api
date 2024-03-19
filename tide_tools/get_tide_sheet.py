@@ -25,11 +25,11 @@ def hours_time_difference(t2: datetime, t1: datetime) -> str:
 
 
 def get_data_sheet(
-        station_name: str,
-        start_date: datetime,
-        end_date: datetime,
-        tz: str = "America/Vancouver",
-        tide_windows: list[float] = None,
+    station_name: str,
+    start_date: datetime,
+    end_date: datetime,
+    tz: str = "America/Vancouver",
+    tide_windows: list[float] = None,
 ):
     if tide_windows is None:
         tide_windows = [1.5, 2.0]
