@@ -15,18 +15,16 @@ from fastapi.params import Path, Query
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from starlette.responses import Response
 
-from tide_api.models import StationRead, TideWindowRead
+from tide_api.models import StationRead, TideWindowRead, StationReadWithoutCoords
 from tide_tools.get_tide_sheet import get_data_sheet, expand_windows
 from tide_tools.lib import get_station_options
 
 app = FastAPI(
     title="Tide Window API",
     version="0.1.0alpha",
-    description="API to get tide windows for a given station between two dates. "
-                ""
-                ""
-                "*Warning: This tool is in development. "
-                "Results may not be accurate and URLs may change. Use at your own risk.*",
+    description="API to get tide windows for a given station between two dates.   \n"
+    "*Warning: This tool is in development. "
+    "Results may not be accurate and URLs may change. Use at your own risk.*",
     root_path=os.getenv("ROOT_PATH", ""),
     openapi_tags=[
         {
@@ -79,30 +77,43 @@ def redirect_to_docs():
 
 
 @app.get("/stations", tags=["Stations"])
-def list_stations() -> list[StationRead]:
+def list_stations(
+    include_coords: bool = Query(
+        True, description="Include station coordinates in the response"
+    )
+) -> list[StationRead] | list[StationReadWithoutCoords]:
+    cls = StationRead if include_coords else StationReadWithoutCoords
     return [
-        StationRead(name=s.officialName, latitude=s.latitude, longitude=s.longitude)
+        cls(name=s.officialName, latitude=s.latitude, longitude=s.longitude)
         for s in stations
     ]
 
 
 @app.get("/stations/{station_name}", tags=["Stations"])
-def station_info_by_name(station_name: StationName) -> StationRead:
+def station_info_by_name(
+    station_name: StationName,
+    include_coords=Query(
+        True, description="Include station coordinates in the response"
+    ),
+) -> StationRead | StationReadWithoutCoords:
     station = next(s for s in stations if s.officialName == station_name.value)
-    station = StationRead(
-        name=station.officialName,
-        latitude=station.latitude,
-        longitude=station.longitude,
-    )
+    if include_coords:
+        station = StationRead(
+            name=station.officialName,
+            latitude=station.latitude,
+            longitude=station.longitude,
+        )
+    else:
+        station = StationReadWithoutCoords(name=station.officialName)
     return station
 
 
 def get_tides(
-        station_name: StationName,
-        start_date: datetime,
-        end_date: datetime,
-        tz: Optional[str] = "America/Vancouver",
-        tide_window: list[float] = None,
+    station_name: StationName,
+    start_date: datetime,
+    end_date: datetime,
+    tz: Optional[str] = "America/Vancouver",
+    tide_window: list[float] = None,
 ):
     if tide_window is None:
         tide_window = []
@@ -115,28 +126,45 @@ def get_tides(
     return get_data_sheet(station_name.value, start_date, end_date, tz, tide_window)
 
 
-@app.get("/tides/events/{station_name}.png", tags=["Tides"])
+class PNGReponse(Response):
+    media_type = "image/png"
+
+
+@app.get(
+    "/tides/events/{station_name}.png",
+    tags=["Tides"],
+    response_class=PNGReponse,
+    responses={
+        200: {
+            "description": "PNG image of tide events",
+            "content": {
+                "image/png": {
+                    "schema": {"type": "string", "format": "binary"},
+                }
+            },
+        }
+    },
+)
 def graph_24h_tide_for_station_on_date(
-        station_name: StationName = Path(..., description="The name of the station"),
-        date: datetime = Query(
-            ...,
-            description="The start date and time to plot in ISO8601 format",
-            openapi_examples=iso8601_start_examples,
-            default_factory=lambda: arrow.now("America/Vancouver").date(),
-        ),
-        tz: Optional[str] = Query("America/Vancouver",
-                                  description="The timezone to use"),
-        tide_window: list[float] = Query(
-            [],
-            description="Tide windows of interest, in meters",
-        ),
-        show_sunrise_sunset: bool = Query(
-            True, description="Show sunrise and sunset times"
-        ),
-        show_current_time: bool = Query(True, description="Show the current time"),
-        width: int = Query(640, description="Width of the plot in pixels"),
-        height: int = Query(480, description="Height of the plot in pixels"),
-        dpi: int = Query(100, description="DPI of the plot"),
+    station_name: StationName = Path(..., description="The name of the station"),
+    date: datetime = Query(
+        ...,
+        description="The start date and time to plot in ISO8601 format",
+        openapi_examples=iso8601_start_examples,
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
+    ),
+    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [],
+        description="Tide windows of interest, in meters",
+    ),
+    show_sunrise_sunset: bool = Query(
+        True, description="Show sunrise and sunset times"
+    ),
+    show_current_time: bool = Query(True, description="Show the current time"),
+    width: int = Query(640, description="Width of the plot in pixels"),
+    height: int = Query(480, description="Height of the plot in pixels"),
+    dpi: int = Query(100, description="DPI of the plot"),
 ):
     start_date = arrow.get(date, tz).datetime
     end_date = start_date + timedelta(days=1)
@@ -202,7 +230,7 @@ def graph_24h_tide_for_station_on_date(
         buf.seek(0)
         png = buf.getvalue()
 
-    return Response(content=png, media_type="image/png")
+    return PNGReponse(content=png)
 
 
 class CSVResponse(PlainTextResponse):
@@ -231,31 +259,30 @@ class CSVResponse(PlainTextResponse):
     },
 )
 def get_tides_for_station_between_dates_as_csv(
-        station_name: StationName = Path(..., description="The name of the station"),
-        start_date: datetime = Query(
-            ...,
-            description="The start date in ISO8601 format",
-            openapi_examples=iso8601_start_examples,
-            default_factory=lambda: arrow.now("America/Vancouver").date(),
-        ),
-        end_date: datetime = Query(
-            ...,
-            description="The end date in ISO8601 format",
-            openapi_examples=iso8601_end_examples,
-            default_factory=lambda: (
-                    arrow.now("America/Vancouver") + timedelta(weeks=4)
-            ).date(),
-        ),
-        tz: Optional[str] = Query("America/Vancouver",
-                                  description="The timezone to use"),
-        tide_window: list[float] = Query(
-            [],
-            description="Tide windows to find (in meters)",
-        ),
-        excel_date_format: bool = Query(
-            False,
-            description="Export dates in Excel decimal format instead of ISO8601 strings",
-        ),
+    station_name: StationName = Path(..., description="The name of the station"),
+    start_date: datetime = Query(
+        ...,
+        description="The start date in ISO8601 format",
+        openapi_examples=iso8601_start_examples,
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
+    ),
+    end_date: datetime = Query(
+        ...,
+        description="The end date in ISO8601 format",
+        openapi_examples=iso8601_end_examples,
+        default_factory=lambda: (
+            arrow.now("America/Vancouver") + timedelta(weeks=4)
+        ).date(),
+    ),
+    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [],
+        description="Tide windows to find (in meters)",
+    ),
+    excel_date_format: bool = Query(
+        False,
+        description="Export dates in Excel decimal format instead of ISO8601 strings",
+    ),
 ):
     sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)
     if isinstance(sheet, HTTPException):
@@ -288,27 +315,26 @@ def get_tides_for_station_between_dates_as_csv(
 
 @app.get("/tides/events/{station_name}", tags=["Tides"])
 def get_tides_for_station_between_dates(
-        station_name: StationName = Path(..., description="The name of the station"),
-        start_date: datetime = Query(
-            ...,
-            description="The start date in ISO8601 format",
-            openapi_examples=iso8601_start_examples,
-            default_factory=lambda: arrow.now("America/Vancouver").date(),
-        ),
-        end_date: datetime = Query(
-            ...,
-            description="The end date in ISO8601 format",
-            openapi_examples=iso8601_end_examples,
-            default_factory=lambda: (
-                    arrow.now("America/Vancouver") + timedelta(weeks=4)
-            ).date(),
-        ),
-        tz: Optional[str] = Query("America/Vancouver",
-                                  description="The timezone to use"),
-        tide_window: list[float] = Query(
-            [],
-            description="Tide windows to find (in meters)",
-        ),
+    station_name: StationName = Path(..., description="The name of the station"),
+    start_date: datetime = Query(
+        ...,
+        description="The start date in ISO8601 format",
+        openapi_examples=iso8601_start_examples,
+        default_factory=lambda: arrow.now("America/Vancouver").date(),
+    ),
+    end_date: datetime = Query(
+        ...,
+        description="The end date in ISO8601 format",
+        openapi_examples=iso8601_end_examples,
+        default_factory=lambda: (
+            arrow.now("America/Vancouver") + timedelta(weeks=4)
+        ).date(),
+    ),
+    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tide_window: list[float] = Query(
+        [],
+        description="Tide windows to find (in meters)",
+    ),
 ) -> list[TideWindowRead]:
     try:
         sheet, _ = get_tides(station_name, start_date, end_date, tz, tide_window)

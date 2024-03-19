@@ -4,10 +4,17 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class StationRead(BaseModel):
+class StationBase(BaseModel):
     name: str
+
+
+class StationRead(StationBase):
     latitude: float
     longitude: float
+
+
+class StationReadWithoutCoords(StationBase):
+    pass
 
 
 class Window(BaseModel):
