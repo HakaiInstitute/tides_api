@@ -213,7 +213,7 @@ def get_tides_for_station_between_dates_as_csv(
         content=df.to_pandas().to_csv(index=False),
         headers={
             "Content-Disposition": f"attachment; "
-                                   f"filename={fname_station}_tides_{fname_range}.csv"
+            f"filename={fname_station}_tides_{fname_range}.csv"
         },
     )
 
