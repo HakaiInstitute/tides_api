@@ -1,8 +1,8 @@
+import pandas as pd
+import plotly.express as px
 from fastapi import APIRouter
 from fastapi.params import Query
 from fastapi.responses import HTMLResponse
-
-import plotly.graph_objects as go
 
 from tide_api.models import StationRead, StationReadWithoutCoords, stations, StationName
 
@@ -24,30 +24,21 @@ def list_stations(
         for s in stations
     ]
 
-@router.get("/map")
-def show_map()  -> HTMLResponse:
-    
-    name,latitude,longitude = [],[],[]
-    for station in stations:
-        name.append(station.officialName)
-        latitude.append(station.latitude)
-        longitude.append(station.longitude)
 
-    fig = go.Figure(go.Scattermapbox(
-            lat=latitude,
-            lon=longitude,
-            mode='markers',
-            marker=go.scattermapbox.Marker(
-                size=9
-            ),
-            text=name,
-            name="CHS Tide Stations"
-        )
+@router.get("/map", response_class=HTMLResponse)
+def show_map():
+    df = pd.DataFrame([s.model_dump() for s in list_stations()])
+    fig = px.scatter_mapbox(
+        df,
+        lat="latitude",
+        lon="longitude",
+        hover_name="name",
+        zoom=1,
     )
-
     fig.update_layout(mapbox_style="open-street-map")
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-    return HTMLResponse(fig.to_html(include_plotlyjs="cdn"))
+    fig.update_layout(margin=dict(r=0, l=0, b=0, t=0))
+    return fig.to_html(include_plotlyjs="cdn")
+
 
 @router.get("/{station_name}")
 def station_info_by_name(
