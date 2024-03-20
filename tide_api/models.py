@@ -3,8 +3,9 @@ import re
 from datetime import datetime, date
 from typing import Optional
 
-import requests
 from pydantic import BaseModel, Field, computed_field, AliasChoices
+
+from tide_api.utils import chs_api
 
 
 class StationBase(BaseModel):
@@ -108,9 +109,7 @@ class FullTideMeasurement(TideMeasurementBase):
 
 
 def get_station_options() -> list[FullStation]:
-    station_req = requests.get(
-        "https://api.iwls-sine.azure.cloud-nuage.dfo-mpo.gc.ca/api/v1/stations"
-    )
+    station_req = chs_api.get("/stations")
     if station_req.ok:
         station_data = station_req.json()
         station_data = [FullStation.parse_obj(d) for d in station_data]

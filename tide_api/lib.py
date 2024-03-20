@@ -4,7 +4,6 @@ import arrow
 import astral
 import astral.sun
 import dateutil.tz
-import requests
 from scipy.interpolate import InterpolatedUnivariateSpline
 
 from tide_api.models import (
@@ -14,6 +13,7 @@ from tide_api.models import (
     TideMeasurement,
     TideEvent,
 )
+from tide_api.utils import chs_api
 
 
 class StationTides:
@@ -130,8 +130,9 @@ class StationTides:
             end_dt = (
                 chunk_end.to("UTC").isoformat(timespec="seconds").replace("+00:00", "Z")
             )
-            req = requests.get(
-                f"https://api.iwls-sine.azure.cloud-nuage.dfo-mpo.gc.ca/api/v1/stations/{self.station.id}/data?time-series-code=wlp&from={start_dt}&to={end_dt}&resolution=FIFTEEN_MINUTES"
+
+            req = chs_api.get(
+                f"/stations/{self.station.id}/data?time-series-code=wlp&from={start_dt}&to={end_dt}&resolution=FIFTEEN_MINUTES"
             )
             if not req.ok:
                 raise Exception(f"Failed to get tides: {req.text}")

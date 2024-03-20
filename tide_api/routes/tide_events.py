@@ -10,7 +10,6 @@ from fastapi import APIRouter
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
 from matplotlib import pyplot as plt, dates as mdates
-from plotly.graph_objs.layout import Annotation
 
 from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES, TF
 from tide_api.lib import expand_windows, StationTides
