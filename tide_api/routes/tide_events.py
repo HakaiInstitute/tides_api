@@ -102,6 +102,7 @@ def interactive_tide_graph(
         x="time",
         y="height",
         title=f"Tides for {station_name.value}",
+        labels={"time": "Time", "height": "Tide Height (m)"},
     )
     if show_low_tides:
         for lt in station_tides.low_tides:
