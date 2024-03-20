@@ -112,7 +112,7 @@ def interactive_tide_graph(
         for lt in station_tides.low_tides:
             d = arrow.Arrow.fromdatetime(lt.time)
             fig.add_annotation(
-                x=d.replace(tzinfo="local").timestamp() * 1000,
+                x=d.timestamp() * 1000,
                 y=lt.height,
                 text=d.format("HH:mm"),
             )
@@ -120,7 +120,7 @@ def interactive_tide_graph(
         for ht in station_tides.high_tides:
             d = arrow.Arrow.fromdatetime(ht.time)
             fig.add_annotation(
-                x=d.replace(tzinfo="local").timestamp() * 1000,
+                x=d.timestamp() * 1000,
                 y=ht.height,
                 text=d.format("HH:mm"),
             )
@@ -130,7 +130,7 @@ def interactive_tide_graph(
             if w.start:
                 d = arrow.Arrow.fromdatetime(w.start)
                 fig.add_vline(
-                    x=d.replace(tzinfo="local").timestamp() * 1000,
+                    x=d.timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="start",
@@ -140,7 +140,7 @@ def interactive_tide_graph(
             if w.end:
                 d = arrow.Arrow.fromdatetime(w.end)
                 fig.add_vline(
-                    x=d.replace(tzinfo="local").timestamp() * 1000,
+                    x=d.timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="end",
@@ -154,7 +154,7 @@ def interactive_tide_graph(
         if show_sunrise and (sunrise := station_tides.get_sunrise(day.date())):
             d = arrow.Arrow.fromdatetime(sunrise)
             fig.add_vline(
-                x=d.replace(tzinfo="local").timestamp() * 1000,
+                x=d.timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunrise",
@@ -164,7 +164,7 @@ def interactive_tide_graph(
         if show_sunset and (sunset := station_tides.get_sunset(day.date())):
             d = arrow.Arrow.fromdatetime(sunset)
             fig.add_vline(
-                x=d.replace(tzinfo="local").timestamp() * 1000,
+                x=d.timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunset",
@@ -177,7 +177,7 @@ def interactive_tide_graph(
         if start_date < d < end_date:
             # Add point marker
             fig.add_scatter(
-                x=[d.replace(tzinfo="local").timestamp() * 1000],
+                x=[d.timestamp() * 1000],
                 y=[height],
                 mode="markers",
                 marker=dict(color="black", size=10),
@@ -187,17 +187,6 @@ def interactive_tide_graph(
                 hovertext=f"Current: {height:.2f}m",
                 showlegend=False,
             )
-
-            # fig.add_annotation(
-            #     x=d.replace(tzinfo="local").timestamp() * 1000,
-            #     y=height,
-            #     text=f'Current: {height:.2f}m',
-            # )
-            # fig.add_vline(
-            #     x=d.replace(tzinfo="local").timestamp() * 1000,
-            #     line_dash="dash",
-            #     line_color="black",
-            # )
 
     fig.update_layout(title_x=0.5, xaxis_title=None)
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
