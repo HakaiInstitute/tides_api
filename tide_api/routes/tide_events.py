@@ -103,6 +103,7 @@ def interactive_tide_graph(
         y="height",
         title=f"Tides for {station_name.value}",
         labels={"time": "Time", "height": "Tide Height (m)"},
+        template="plotly",
     )
     if show_low_tides:
         for lt in station_tides.low_tides:
@@ -152,6 +153,7 @@ def interactive_tide_graph(
         if start_date < d < end_date:
             fig.add_vline(x=d, line_dash="dash", line_color="black")
 
+    fig.update_layout(title_x=0.5, xaxis_title=None)
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
 
 
