@@ -1,15 +1,12 @@
-import io
 from datetime import datetime, date
 from typing import Any, Annotated
 
 import arrow
-import dateutil.tz
 import plotly.express as px
 import polars as pl
 from fastapi import APIRouter
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
-from matplotlib import pyplot as plt, dates as mdates
 
 from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES, TF
 from tide_api.lib import expand_windows, StationTides
@@ -18,7 +15,7 @@ from tide_api.models import (
     StationName,
     FullStation,
 )
-from tide_api.responses import PNGResponse, CSVResponse
+from tide_api.responses import CSVResponse
 
 router = APIRouter(
     prefix="/tides/events",
@@ -200,157 +197,6 @@ def interactive_tide_graph(
 
     fig.update_layout(title_x=0.5, xaxis_title=None)
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
-
-
-@router.get(
-    "/{station_name}.png",
-    response_class=PNGResponse,
-    responses={
-        200: {
-            "description": "PNG image of tide events",
-            "content": {
-                "image/png": {
-                    "schema": {"type": "string", "format": "binary"},
-                }
-            },
-        }
-    },
-)
-def generate_tide_graph_image(
-    station_name: Annotated[StationName, Path(description="The name of the station")],
-    start_date: Annotated[
-        date | None,
-        Query(
-            description="The start date in ISO8601 format",
-            openapi_examples=ISO8601_START_EXAMPLES,
-        ),
-    ] = None,
-    end_date: Annotated[
-        date | None,
-        Query(
-            description="The end date in ISO8601 format",
-            openapi_examples=ISO8601_END_EXAMPLES,
-        ),
-    ] = None,
-    tz: Annotated[
-        str | None,
-        Query(
-            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
-        ),
-    ] = None,
-    tide_window: Annotated[
-        list[float], Query(description="Tide windows to find (in meters)")
-    ] = [],
-    show_sunrise: Annotated[
-        bool, Query(description="Display sunrise time as yellow line")
-    ] = False,
-    show_sunset: Annotated[
-        bool, Query(description="Display sunset time as yellow line")
-    ] = False,
-    show_current_time: Annotated[
-        bool, Query(description="Display current time as black dashed line")
-    ] = True,
-    show_high_tides: Annotated[
-        bool, Query(description="Display high tides as red dashed line")
-    ] = True,
-    show_low_tides: Annotated[
-        bool, Query(description="Display low tides as green dashed line")
-    ] = True,
-    width: Annotated[int, Query(description="Width of the plot in pixels")] = 640,
-    height: Annotated[int, Query(description="Height of the plot in pixels")] = 480,
-    dpi: Annotated[int, Query(description="DPI of the plot")] = 100,
-):
-    station = FullStation.from_name(station_name.value)
-    tz = (
-        TF.timezone_at(lat=station.latitude, lng=station.longitude)
-        if tz is None
-        else tz
-    )
-
-    start_date = (
-        arrow.now(tz).replace(hour=0, minute=0, second=0)
-        if start_date is None
-        else arrow.get(start_date, tz)
-    )
-    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
-
-    station_tides = StationTides(
-        station,
-        start_date=start_date.date(),
-        end_date=end_date.date(),
-        tz=tz,
-    )
-    windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
-
-    df = pl.DataFrame(station_tides.tides, schema_overrides={"time": pl.Datetime})
-
-    fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
-    ax1 = fig.subplots()
-    ax1.grid(axis="y")
-
-    plt.xticks(rotation=90)
-    plt.ylabel("Tide Height (m)")
-    plt.xlabel("Time")
-
-    plt.plot(
-        df["time"].to_numpy(),
-        df["height"].to_numpy(),
-    )
-    plt.title(f"Tides for {station.name}")
-    plt.xlim(start_date, end_date)
-
-    x_ticks = []
-    if show_low_tides:
-        for lt in station_tides.low_tides:
-            d = arrow.get(lt.time).to(tz).datetime
-            x_ticks.append(d)
-            plt.axvline(d, linestyle="dashed", c="red")
-    if show_high_tides:
-        for ht in station_tides.high_tides:
-            d = arrow.get(ht.time).to(tz).datetime
-            x_ticks.append(d)
-            plt.axvline(d, linestyle="dashed", c="green")
-
-    for win in windows_xm:
-        for w in win:
-            if w.start:
-                d = arrow.get(w.start).to(tz).datetime
-                x_ticks.append(d)
-                plt.axvline(d, linestyle="dotted", c="blue")
-            if w.end:
-                d = arrow.get(w.end).to(tz).datetime
-                x_ticks.append(d)
-                plt.axvline(d, linestyle="dotted", c="blue")
-
-    for day in arrow.Arrow.range(
-        "day", start_date.datetime, end_date.shift(days=-1).datetime, tz=tz
-    ):
-        if show_sunrise and (sunrise := station_tides.get_sunrise(day)):
-            d = arrow.get(sunrise).to(tz).datetime
-            x_ticks.append(d)
-            plt.axvline(d, linestyle="dashed", c="yellow")
-        if show_sunset and (sunset := station_tides.get_sunset(day)):
-            d = arrow.get(sunset).to(tz).datetime
-            x_ticks.append(d)
-            plt.axvline(d, linestyle="dashed", c="yellow")
-    if show_current_time:
-        d = arrow.now(tz).datetime
-        if start_date < d < end_date:
-            x_ticks.append(d)
-            plt.axvline(d, linestyle="dashed", c="black")
-
-    ax1.set_xticks(sorted(list(set(x_ticks))))
-    ax1.xaxis.set_major_formatter(
-        mdates.DateFormatter("%H:%M", tz=dateutil.tz.gettz(tz))
-    )
-    plt.tight_layout()
-
-    with io.BytesIO() as buf:
-        plt.savefig(buf, format="png")
-        buf.seek(0)
-        png = buf.getvalue()
-
-    return PNGResponse(content=png)
 
 
 @router.get(
