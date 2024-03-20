@@ -9,7 +9,6 @@ ENV PATH /opt/conda/envs/tides/bin:$PATH
 ENTRYPOINT ["/bin/bash"]
 WORKDIR /app
 COPY ./tide_api /app/tide_api
-COPY ./tide_tools /app/tide_tools
 
 EXPOSE 80
 
