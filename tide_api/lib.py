@@ -52,6 +52,15 @@ class StationTides:
     def heights(self) -> list[float]:
         return [d.height for d in self.tides]
 
+    def get_tide_at_time(self, time: datetime) -> TideMeasurement:
+        if time < self.start_date or time > self.end_date:
+            raise ValueError("Time is out of range")
+
+        f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=3)
+        height = f(time.timestamp())
+
+        return TideMeasurement(time=time, height=height)
+
     @property
     def high_tides(self) -> list[TideMeasurement]:
         if self._high_tides is None:

@@ -58,19 +58,19 @@ def interactive_tide_graph(
     ] = [],
     show_sunrise: Annotated[
         bool, Query(description="Display sunrise time as yellow line")
-    ] = False,
+    ] = True,
     show_sunset: Annotated[
         bool, Query(description="Display sunset time as yellow line")
-    ] = False,
+    ] = True,
     show_current_time: Annotated[
         bool, Query(description="Display current time as black dashed line")
     ] = True,
     show_high_tides: Annotated[
-        bool, Query(description="Display high tides as red dashed line")
-    ] = False,
+        bool, Query(description="Annotate high tide times")
+    ] = True,
     show_low_tides: Annotated[
-        bool, Query(description="Display low tides as green dashed line")
-    ] = False,
+        bool, Query(description="Annotate low tide times")
+    ] = True,
     div_only: Annotated[
         bool, Query(description="Return a div instead of full HTML page.")
     ] = False,
@@ -105,30 +105,24 @@ def interactive_tide_graph(
         x="time",
         y="height",
         title=f"Tides for {station_name.value}",
-        labels={"time": "Time", "height": "Tide Height (m)"},
+        labels={"time": "Time", "height": "Height (m)"},
         template="plotly",
     )
     if show_low_tides:
         for lt in station_tides.low_tides:
             d = arrow.Arrow.fromdatetime(lt.time)
-            fig.add_vline(
+            fig.add_annotation(
                 x=d.replace(tzinfo="local").timestamp() * 1000,
-                line_dash="dash",
-                line_color="red",
-                annotation_text="low tide",
-                annotation_position="bottom right",
-                annotation_hovertext=f"{d.format('HH:mm')} - {lt.height:.2f}m",
+                y=lt.height,
+                text=d.format("HH:mm"),
             )
     if show_high_tides:
         for ht in station_tides.high_tides:
             d = arrow.Arrow.fromdatetime(ht.time)
-            fig.add_vline(
+            fig.add_annotation(
                 x=d.replace(tzinfo="local").timestamp() * 1000,
-                line_dash="dash",
-                line_color="red",
-                annotation_text="high tide",
-                annotation_position="top right",
-                annotation_hovertext=f"{d.format('HH:mm')} - {ht.height:.2f}m",
+                y=ht.height,
+                text=d.format("HH:mm"),
             )
 
     for win in windows_xm:
@@ -165,6 +159,7 @@ def interactive_tide_graph(
                 line_color="yellow",
                 annotation_text="sunrise",
                 annotation_hovertext=d.format("HH:mm"),
+                annotation_bgcolor="yellow",
             )
         if show_sunset and (sunset := station_tides.get_sunset(day.date())):
             d = arrow.Arrow.fromdatetime(sunset)
@@ -174,15 +169,35 @@ def interactive_tide_graph(
                 line_color="yellow",
                 annotation_text="sunset",
                 annotation_hovertext=d.format("HH:mm"),
+                annotation_bgcolor="yellow",
             )
     if show_current_time:
         d = arrow.now(tz)
+        height = station_tides.get_tide_at_time(d.datetime).height
         if start_date < d < end_date:
-            fig.add_vline(
-                x=d.replace(tzinfo="local").timestamp() * 1000,
-                line_dash="dash",
-                line_color="black",
+            # Add point marker
+            fig.add_scatter(
+                x=[d.replace(tzinfo="local").timestamp() * 1000],
+                y=[height],
+                mode="markers",
+                marker=dict(color="black", size=10),
+                name="Current Time",
+                hoverinfo="text",
+                hoverinfosrc="x",
+                hovertext=f"Current: {height:.2f}m",
+                showlegend=False,
             )
+
+            # fig.add_annotation(
+            #     x=d.replace(tzinfo="local").timestamp() * 1000,
+            #     y=height,
+            #     text=f'Current: {height:.2f}m',
+            # )
+            # fig.add_vline(
+            #     x=d.replace(tzinfo="local").timestamp() * 1000,
+            #     line_dash="dash",
+            #     line_color="black",
+            # )
 
     fig.update_layout(title_x=0.5, xaxis_title=None)
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
