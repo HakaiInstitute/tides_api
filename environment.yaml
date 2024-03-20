@@ -8,6 +8,7 @@ dependencies:
   - fastapi
   - matplotlib
   - numpy
+  - pandas
   - plotly
   - polars
   - pyarrow
