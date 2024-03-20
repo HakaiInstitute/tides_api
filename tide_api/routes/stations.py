@@ -36,6 +36,7 @@ def show_map(
         lat="latitude",
         lon="longitude",
         hover_name="name",
+        center=dict(lat=53.7267, lon=-127.6476),
         zoom=1,
     )
     fig.update_layout(mapbox_style="open-street-map")

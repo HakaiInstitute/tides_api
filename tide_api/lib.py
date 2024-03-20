@@ -86,7 +86,16 @@ class StationTides:
         hilo_datetimes = [arrow.get(rt).to(self.tz).datetime for rt in rts]
 
         is_low_tide = [
-            fp((t - timedelta(minutes=1)).timestamp()) < 0 for t in hilo_datetimes
+            fp((t - timedelta(minutes=15)).timestamp())
+            < 0
+            < fp((t + timedelta(minutes=15)).timestamp())
+            for t in hilo_datetimes
+        ]
+        is_high_tide = [
+            fp((t - timedelta(minutes=15)).timestamp())
+            > 0
+            > fp((t + timedelta(minutes=15)).timestamp())
+            for t in hilo_datetimes
         ]
 
         low_tides = [
@@ -96,8 +105,8 @@ class StationTides:
         ]
         high_tides = [
             TideMeasurement(time=t, value=h)
-            for t, h, is_low in zip(hilo_datetimes, hilo_heights, is_low_tide)
-            if not is_low
+            for t, h, is_high in zip(hilo_datetimes, hilo_heights, is_high_tide)
+            if is_high
         ]
 
         return high_tides, low_tides
