@@ -54,8 +54,8 @@ def interactive_tide_graph(
         ),
     ] = None,
     tide_window: Annotated[
-        list[float] | None, Query(description="Tide windows to find (in meters)")
-    ] = None,
+        list[float], Query(description="Tide windows to find (in meters)")
+    ] = [],
     show_sunrise: Annotated[
         bool, Query(description="Display sunrise time as yellow line")
     ] = False,
@@ -88,9 +88,6 @@ def interactive_tide_graph(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
-
-    if tide_window is None:
-        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -194,8 +191,8 @@ def generate_tide_graph_image(
         ),
     ] = None,
     tide_window: Annotated[
-        list[float] | None, Query(description="Tide windows to find (in meters)")
-    ] = None,
+        list[float], Query(description="Tide windows to find (in meters)")
+    ] = [],
     show_sunrise: Annotated[
         bool, Query(description="Display sunrise time as yellow line")
     ] = False,
@@ -228,9 +225,6 @@ def generate_tide_graph_image(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
-
-    if tide_window is None:
-        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -351,8 +345,8 @@ def get_tides_for_station_between_dates_as_csv(
         ),
     ] = None,
     tide_window: Annotated[
-        list[float] | None, Query(description="Tide windows to find (in meters)")
-    ] = None,
+        list[float], Query(description="Tide windows to find (in meters)")
+    ] = [],
 ):
     station = FullStation.from_name(station_name.value)
     tz = (
@@ -367,9 +361,6 @@ def get_tides_for_station_between_dates_as_csv(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
-
-    if tide_window is None:
-        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -415,8 +406,8 @@ def get_tides_for_station_between_dates(
         ),
     ] = None,
     tide_window: Annotated[
-        list[float] | None, Query(description="Tide windows to find (in meters)")
-    ] = None,
+        list[float], Query(description="Tide windows to find (in meters)")
+    ] = [],
 ) -> list[TideEvent]:
     station = FullStation.from_name(station_name.value)
     tz = (
@@ -431,9 +422,6 @@ def get_tides_for_station_between_dates(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
-
-    if tide_window is None:
-        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
