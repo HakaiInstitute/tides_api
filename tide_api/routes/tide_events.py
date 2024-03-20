@@ -180,8 +180,9 @@ def interactive_tide_plot(
             )
     if show_current_time:
         d = arrow.now(tz)
-        height = station_tides.get_tide_at_time(d.datetime).height
         if start_date < d < end_date:
+            height = station_tides.get_tide_at_time(d.datetime).height
+
             # Add point marker
             fig.add_scatter(
                 x=[d.timestamp() * 1000],
