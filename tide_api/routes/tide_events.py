@@ -1,21 +1,25 @@
 import io
-from datetime import datetime, timedelta
-from typing import Optional, Any
+from datetime import datetime, date
+from typing import Any
 
 import arrow
 import dateutil.tz
+import plotly.express as px
 import polars as pl
 from fastapi import APIRouter
 from fastapi.params import Path, Query
+from fastapi.responses import HTMLResponse
 from matplotlib import pyplot as plt, dates as mdates
+from timezonefinder import timezonefinder
 
 from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES
 from tide_api.lib import expand_windows, StationTides
 from tide_api.models import (
     TideEvent,
+    StationName,
+    FullStation,
 )
 from tide_api.responses import PNGResponse, CSVResponse
-from tide_api.stations import StationName
 
 router = APIRouter(
     prefix="/tides/events",
@@ -27,18 +31,122 @@ def parse_tz_date(dt: Any, tz: str) -> datetime:
     return arrow.get(dt, tz).datetime
 
 
-def get_station_tides(
-    station_name: StationName,
-    start_date: datetime,
-    end_date: datetime,
-    tz: Optional[str] = "America/Vancouver",
+@router.get("/{station_name}/plot", response_class=HTMLResponse)
+def interactive_tide_graph(
+    station_name: StationName = Path(..., description="The name of the station"),
+    start_date: date = Query(
+        None,
+        description="The start date in ISO8601 format",
+        openapi_examples=ISO8601_START_EXAMPLES,
+    ),
+    end_date: date = Query(
+        None,
+        description="The end date in ISO8601 format.",
+        openapi_examples=ISO8601_END_EXAMPLES,
+    ),
+    tz: str = Query(
+        None,
+        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
+    ),
+    div_only: bool = Query(
+        False, description="Return a div instead of full HTML page."
+    ),
+    tide_window: list[float] = Query(
+        [], description="Tide windows to find (in meters)"
+    ),
+    show_sunrise: bool = Query(
+        False, description="Display sunrise time as yellow line"
+    ),
+    show_sunset: bool = Query(False, description="Display sunset time as yellow line"),
+    show_current_time: bool = Query(
+        True, description="Display current time as black dashed line"
+    ),
+    show_high_tides: bool = Query(
+        False, description="Display high tides as red dashed line"
+    ),
+    show_low_tides: bool = Query(
+        False, description="Display low tides as green dashed line"
+    ),
 ):
-    start_date = parse_tz_date(start_date, tz)
-    end_date = parse_tz_date(end_date, tz)
-
-    return StationTides.from_name(
-        station_name.value, start_date=start_date, end_date=end_date
+    station = FullStation.from_name(station_name.value)
+    tz = (
+        timezonefinder.TimezoneFinder().timezone_at(
+            lat=station.latitude, lng=station.longitude
+        )
+        if tz is None
+        else tz
     )
+
+    start_date = (
+        arrow.now(tz).replace(hour=0, minute=0, second=0)
+        if start_date is None
+        else arrow.get(start_date, tz)
+    )
+    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    station_tides = StationTides(
+        station, start_date=start_date.datetime, end_date=end_date.datetime
+    )
+    windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
+
+    df = pl.DataFrame(
+        station_tides.tides, schema_overrides={"time": pl.Datetime(time_zone=tz)}
+    )
+    fig = px.line(
+        df,
+        x="time",
+        y="height",
+        title=f"Tides for {station_name.value}",
+    )
+    if show_low_tides:
+        for lt in station_tides.low_tides:
+            fig.add_vline(
+                x=arrow.get(lt.time).to(tz).datetime, line_dash="dash", line_color="red"
+            )
+    if show_high_tides:
+        for ht in station_tides.high_tides:
+            fig.add_vline(
+                x=arrow.get(ht.time).to(tz).datetime,
+                line_dash="dash",
+                line_color="green",
+            )
+
+    for win in windows_xm:
+        for w in win:
+            if w.start:
+                fig.add_vline(
+                    x=arrow.get(w.start).to(tz).datetime,
+                    line_dash="dot",
+                    line_color="blue",
+                )
+            if w.end:
+                fig.add_vline(
+                    x=arrow.get(w.end).to(tz).datetime,
+                    line_dash="dot",
+                    line_color="blue",
+                )
+
+    for day in arrow.Arrow.range(
+        "day", start_date.datetime, end_date.shift(days=-1).datetime, tz=tz
+    ):
+        if show_sunrise and (sunrise := station_tides.get_sunrise(day)):
+            fig.add_vline(
+                x=arrow.get(sunrise).to(tz).datetime,
+                line_dash="dash",
+                line_color="yellow",
+            )
+        if show_sunset and (sunset := station_tides.get_sunset(day)):
+            fig.add_vline(
+                x=arrow.get(sunset).to(tz).datetime,
+                line_dash="dash",
+                line_color="yellow",
+            )
+    if show_current_time:
+        d = arrow.now(tz).datetime
+        if start_date < d < end_date:
+            fig.add_vline(x=d, line_dash="dash", line_color="black")
+
+    return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
 
 
 @router.get(
@@ -55,32 +163,64 @@ def get_station_tides(
         }
     },
 )
-def graph_24h_tide_for_station_on_date(
+def generate_tide_graph_image(
     station_name: StationName = Path(..., description="The name of the station"),
-    date: datetime = Query(
-        ...,
-        description="The start date and time to plot in ISO8601 format",
+    start_date: date = Query(
+        None,
+        description="The start date in ISO8601 format",
         openapi_examples=ISO8601_START_EXAMPLES,
-        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
-    tz: str = Query("America/Vancouver", description="The timezone to use"),
-    tide_window: list[float] = Query(
-        [],
-        description="Tide windows of interest, in meters",
+    end_date: date = Query(
+        None,
+        description="The end date in ISO8601 format.",
+        openapi_examples=ISO8601_END_EXAMPLES,
     ),
-    show_sunrise_sunset: bool = Query(
-        True, description="Show sunrise and sunset times"
+    tz: str = Query(
+        None,
+        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
     ),
-    show_current_time: bool = Query(True, description="Show the current time"),
     width: int = Query(640, description="Width of the plot in pixels"),
     height: int = Query(480, description="Height of the plot in pixels"),
     dpi: int = Query(100, description="DPI of the plot"),
+    tide_window: list[float] = Query(
+        [], description="Tide windows to find (in meters)"
+    ),
+    show_sunrise: bool = Query(
+        False, description="Display sunrise time as yellow line"
+    ),
+    show_sunset: bool = Query(False, description="Display sunset time as yellow line"),
+    show_current_time: bool = Query(
+        True, description="Display current time as black dashed line"
+    ),
+    show_high_tides: bool = Query(
+        True, description="Display high tides as red dashed line"
+    ),
+    show_low_tides: bool = Query(
+        True, description="Display low tides as green dashed line"
+    ),
 ):
-    start_date = parse_tz_date(date, tz)
-    end_date = start_date + timedelta(days=1)
-    station_tides = get_station_tides(station_name, start_date, end_date, tz)
-    sheet = station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
-    tides = station_tides.tides
+    station = FullStation.from_name(station_name.value)
+    tz = (
+        timezonefinder.TimezoneFinder().timezone_at(
+            lat=station.latitude, lng=station.longitude
+        )
+        if tz is None
+        else tz
+    )
+
+    start_date = (
+        arrow.now(tz).replace(hour=0, minute=0, second=0)
+        if start_date is None
+        else arrow.get(start_date, tz)
+    )
+    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    station_tides = StationTides(
+        station, start_date=start_date.datetime, end_date=end_date.datetime
+    )
+    windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
+
+    df = pl.DataFrame(station_tides.tides, schema_overrides={"time": pl.Datetime})
 
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax1 = fig.subplots()
@@ -91,42 +231,51 @@ def graph_24h_tide_for_station_on_date(
     plt.xlabel("Time")
 
     plt.plot(
-        [arrow.get(t.time, tz).datetime for t in tides],
-        [t.value for t in tides],
-        c="gray",
+        df["time"].to_numpy(),
+        df["height"].to_numpy(),
     )
-    plt.title(f"Tides for {station_name.value} on {start_date.date()}")
+    plt.title(f"Tides for {station.name}")
     plt.xlim(start_date, end_date)
 
     x_ticks = []
-    for row in sheet:
-        d = arrow.get(row.low_tide_time).datetime
-        plt.axvline(d, c="r", linestyle="dotted")
-        x_ticks.append(d)
-        for i, (wk, wv) in enumerate(row.windows.items()):
-            c = ["b", "g", "c", "m", "k"][i % 5]
-            ws, we = wv.start, wv.end
-            if ws:
-                d = arrow.get(ws).datetime
-                plt.axvline(d, c=c, linestyle="dotted")
+    if show_low_tides:
+        for lt in station_tides.low_tides:
+            d = arrow.get(lt.time).to(tz).datetime
+            x_ticks.append(d)
+            plt.axvline(d, linestyle="dashed", c="red")
+    if show_high_tides:
+        for ht in station_tides.high_tides:
+            d = arrow.get(ht.time).to(tz).datetime
+            x_ticks.append(d)
+            plt.axvline(d, linestyle="dashed", c="green")
+
+    for win in windows_xm:
+        for w in win:
+            if w.start:
+                d = arrow.get(w.start).to(tz).datetime
                 x_ticks.append(d)
-            if we:
-                d = arrow.get(we).datetime
-                plt.axvline(d, c=c, linestyle="dotted")
+                plt.axvline(d, linestyle="dotted", c="blue")
+            if w.end:
+                d = arrow.get(w.end).to(tz).datetime
                 x_ticks.append(d)
-    if row.sunrise and show_sunrise_sunset:
-        d = arrow.get(row.sunrise).datetime
-        plt.axvline(d, c="y", linestyle="dashed")
-        x_ticks.append(d)
-    if row.sunset and show_sunrise_sunset:
-        d = arrow.get(row.sunset).datetime
-        plt.axvline(d, c="y", linestyle="dashed")
-        x_ticks.append(d)
+                plt.axvline(d, linestyle="dotted", c="blue")
+
+    for day in arrow.Arrow.range(
+        "day", start_date.datetime, end_date.shift(days=-1).datetime, tz=tz
+    ):
+        if show_sunrise and (sunrise := station_tides.get_sunrise(day)):
+            d = arrow.get(sunrise).to(tz).datetime
+            x_ticks.append(d)
+            plt.axvline(d, linestyle="dashed", c="yellow")
+        if show_sunset and (sunset := station_tides.get_sunset(day)):
+            d = arrow.get(sunset).to(tz).datetime
+            x_ticks.append(d)
+            plt.axvline(d, linestyle="dashed", c="yellow")
     if show_current_time:
         d = arrow.now(tz).datetime
         if start_date < d < end_date:
-            plt.axvline(d, c="k", linestyle="dashed")
             x_ticks.append(d)
+            plt.axvline(d, linestyle="dashed", c="black")
 
     ax1.set_xticks(sorted(list(set(x_ticks))))
     ax1.xaxis.set_major_formatter(
@@ -164,29 +313,48 @@ def graph_24h_tide_for_station_on_date(
 )
 def get_tides_for_station_between_dates_as_csv(
     station_name: StationName = Path(..., description="The name of the station"),
-    start_date: datetime = Query(
-        ...,
+    start_date: date = Query(
+        None,
         description="The start date in ISO8601 format",
         openapi_examples=ISO8601_START_EXAMPLES,
-        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
-    end_date: datetime = Query(
-        ...,
+    end_date: date = Query(
+        None,
         description="The end date in ISO8601 format",
         openapi_examples=ISO8601_END_EXAMPLES,
-        default_factory=lambda: (
-            arrow.now("America/Vancouver") + timedelta(weeks=4)
-        ).date(),
     ),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tz: str = Query(
+        None,
+        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
+    ),
     tide_window: list[float] = Query(
         [],
         description="Tide windows to find (in meters)",
     ),
 ):
-    station_tides = get_station_tides(station_name, start_date, end_date, tz)
+    station = FullStation.from_name(station_name.value)
+    tz = (
+        timezonefinder.TimezoneFinder().timezone_at(
+            lat=station.latitude, lng=station.longitude
+        )
+        if tz is None
+        else tz
+    )
+
+    start_date = (
+        arrow.now(tz).replace(hour=0, minute=0, second=0)
+        if start_date is None
+        else arrow.get(start_date, tz)
+    )
+    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    station_tides = StationTides(
+        station, start_date=start_date.datetime, end_date=end_date.datetime
+    )
+
     sheet = station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
     df = pl.DataFrame(expand_windows(sheet))
+    df = df.with_columns([pl.col(pl.Datetime).dt.replace_time_zone(tz)])
 
     filename = (
         f'{station_name.value.lower().replace(" ", "_")}'
@@ -203,25 +371,43 @@ def get_tides_for_station_between_dates_as_csv(
 @router.get("/{station_name}")
 def get_tides_for_station_between_dates(
     station_name: StationName = Path(..., description="The name of the station"),
-    start_date: datetime = Query(
-        ...,
+    start_date: date = Query(
+        None,
         description="The start date in ISO8601 format",
         openapi_examples=ISO8601_START_EXAMPLES,
-        default_factory=lambda: arrow.now("America/Vancouver").date(),
     ),
-    end_date: datetime = Query(
-        ...,
+    end_date: date = Query(
+        None,
         description="The end date in ISO8601 format",
         openapi_examples=ISO8601_END_EXAMPLES,
-        default_factory=lambda: (
-            arrow.now("America/Vancouver") + timedelta(weeks=4)
-        ).date(),
     ),
-    tz: Optional[str] = Query("America/Vancouver", description="The timezone to use"),
+    tz: str = Query(
+        None,
+        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
+    ),
     tide_window: list[float] = Query(
         [],
         description="Tide windows to find (in meters)",
     ),
 ) -> list[TideEvent]:
-    station_tides = get_station_tides(station_name, start_date, end_date, tz)
+    station = FullStation.from_name(station_name.value)
+    tz = (
+        timezonefinder.TimezoneFinder().timezone_at(
+            lat=station.latitude, lng=station.longitude
+        )
+        if tz is None
+        else tz
+    )
+
+    start_date = (
+        arrow.now(tz).replace(hour=0, minute=0, second=0)
+        if start_date is None
+        else arrow.get(start_date, tz)
+    )
+    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    station_tides = StationTides(
+        station, start_date=start_date.datetime, end_date=end_date.datetime
+    )
+
     return station_tides.low_tide_events(tz=tz, tide_windows=tide_window)

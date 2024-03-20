@@ -13,7 +13,6 @@ from tide_api.models import (
     TideMeasurement,
     TideEvent,
 )
-from tide_api.stations import get_station_by_name
 
 
 class StationTides:
@@ -32,7 +31,7 @@ class StationTides:
 
     @classmethod
     def from_name(cls, station_name: str, *args, **kwargs):
-        return cls(get_station_by_name(station_name), *args, **kwargs)
+        return cls(FullStation.from_name(station_name), *args, **kwargs)
 
     @property
     def tides(self) -> list[FullTideMeasurement]:
@@ -46,7 +45,7 @@ class StationTides:
 
     @property
     def heights(self) -> list[float]:
-        return [d.value for d in self.tides]
+        return [d.height for d in self.tides]
 
     @property
     def high_tides(self) -> list[TideMeasurement]:
@@ -137,7 +136,7 @@ class StationTides:
         windows = []
         for partition in self._low_tide_partitions:
             timestamps = [arrow.get(d.time).timestamp() for d in partition]
-            heights = [d.value for d in partition]
+            heights = [d.height for d in partition]
 
             if len(timestamps) <= 3:
                 windows.append((None, None))
@@ -214,7 +213,7 @@ class StationTides:
             date_ = arrow.get(lt.time).to(tz).date()
             row = dict(
                 low_tide_date=date_,
-                low_tide_height_m=round(float(lt.value), 2),
+                low_tide_height_m=round(float(lt.height), 2),
                 low_tide_time=format_time(lt.time, tz),
                 sunrise=format_time(self.get_sunrise(date_), tz),
                 noon=format_time(self.get_noon(date_), tz),

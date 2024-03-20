@@ -4,8 +4,7 @@ from fastapi import APIRouter
 from fastapi.params import Query
 from fastapi.responses import HTMLResponse
 
-from tide_api.models import Station, StationWithoutCoords
-from tide_api.stations import STATIONS, StationName
+from tide_api.models import Station, StationWithoutCoords, StationName, STATIONS
 
 router = APIRouter(
     prefix="/stations",
@@ -24,7 +23,9 @@ def list_stations(
 
 
 @router.get("/map", response_class=HTMLResponse)
-def show_map():
+def show_map(
+    div_only: bool = Query(False, description="Return a div instead of full HTML page.")
+):
     df = pl.DataFrame(list_stations()).to_pandas()
     fig = px.scatter_mapbox(
         df,
@@ -35,7 +36,7 @@ def show_map():
     )
     fig.update_layout(mapbox_style="open-street-map")
     fig.update_layout(margin=dict(r=0, l=0, b=0, t=0))
-    return fig.to_html(include_plotlyjs="cdn")
+    return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
 
 
 @router.get("/{station_name}")

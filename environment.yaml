@@ -15,3 +15,6 @@ dependencies:
   - requests
   - scipy
   - uvicorn
+  - pip
+  - pip:
+      - timezonefinder

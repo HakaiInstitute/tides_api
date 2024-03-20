@@ -1,6 +1,9 @@
+import enum
+import re
 from datetime import datetime, date
 from typing import Optional
 
+import requests
 from pydantic import BaseModel, Field, computed_field, AliasChoices
 
 
@@ -22,6 +25,12 @@ class FullStation(Station):
     code: str
     type: str
     time_series: list["TimeSeries"] = Field(..., validation_alias="timeSeries")
+
+    @classmethod
+    def from_name(cls, name: str) -> "FullStation":
+        for station in STATIONS:
+            if re.match(name, station.name):
+                return station
 
 
 class TideWindow(BaseModel):
@@ -86,7 +95,7 @@ class TimeSeries(BaseModel):
 
 class TideMeasurementBase(BaseModel):
     time: datetime = Field(..., validation_alias=AliasChoices("time", "eventDate"))
-    value: float
+    height: float = Field(..., validation_alias=AliasChoices("height", "value"))
 
 
 class TideMeasurement(TideMeasurementBase):
@@ -96,3 +105,23 @@ class TideMeasurement(TideMeasurementBase):
 class FullTideMeasurement(TideMeasurementBase):
     qc_flag_code: int = Field(..., validation_alias="qcFlagCode")
     time_series_id: str = Field(..., validation_alias="timeSeriesId")
+
+
+def get_station_options() -> list[FullStation]:
+    station_req = requests.get(
+        "https://api.iwls-sine.azure.cloud-nuage.dfo-mpo.gc.ca/api/v1/stations"
+    )
+    if station_req.ok:
+        station_data = station_req.json()
+        station_data = [FullStation.parse_obj(d) for d in station_data]
+        station_data = sorted(station_data, key=lambda s: s.name)
+        station_data = filter(
+            lambda s: any([t.code == "wlp" for t in s.time_series]), station_data
+        )
+        return list(station_data)
+    else:
+        raise Exception("Failed to get station options")
+
+
+STATIONS = get_station_options()
+StationName = enum.Enum("StationName", dict([(s.name, s.name) for s in STATIONS]))
