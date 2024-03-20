@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, date
 import arrow
 import astral
 import astral.sun
+import dateutil.tz
 import requests
 from scipy.interpolate import InterpolatedUnivariateSpline
 
@@ -16,7 +17,11 @@ from tide_api.models import (
 
 
 class StationTides:
-    def __init__(self, station: FullStation, start_date: datetime, end_date: datetime):
+    def __init__(self, station: FullStation, start_date: date, end_date: date, tz: str):
+        self.tz = dateutil.tz.gettz(tz)
+        start_date = arrow.Arrow.fromdate(start_date, self.tz)
+        end_date = arrow.Arrow.fromdate(end_date, self.tz)
+
         if end_date <= start_date:
             raise ValueError("End date must be after start date")
 
@@ -69,7 +74,7 @@ class StationTides:
         rts = fp.roots()
 
         hilo_heights = [f(rt) for rt in rts]
-        hilo_datetimes = [arrow.get(rt).to("UTC").datetime for rt in rts]
+        hilo_datetimes = [arrow.get(rt).to(self.tz).datetime for rt in rts]
 
         is_low_tide = [
             fp((t - timedelta(minutes=1)).timestamp()) < 0 for t in hilo_datetimes
@@ -92,33 +97,21 @@ class StationTides:
         if "wlp" not in [ts.code for ts in self.station.time_series]:
             raise ValueError("Station does not have water level data")
 
-        num_days = (self.end_date - self.start_date).days + 1
-
-        date_windows = []
-        for i in range(0, num_days, chunk_req_size):
-            chunk_start = self.start_date + timedelta(days=i)
-            chunk_end = min(
-                self.end_date, chunk_start + timedelta(days=chunk_req_size, minutes=-15)
-            )
+        tides = []
+        for chunk_start, chunk_end in arrow.Arrow.interval(
+            "day",
+            self.start_date.datetime,
+            self.end_date.shift(days=-1).datetime,
+            interval=chunk_req_size,
+        ):
             start_dt = (
-                arrow.get(chunk_start)
-                .to("UTC")
+                chunk_start.to("UTC")
                 .isoformat(timespec="seconds")
                 .replace("+00:00", "Z")
             )
             end_dt = (
-                arrow.get(chunk_end)
-                .to("UTC")
-                .isoformat(timespec="seconds")
-                .replace("+00:00", "Z")
+                chunk_end.to("UTC").isoformat(timespec="seconds").replace("+00:00", "Z")
             )
-
-            date_windows.append((start_dt, end_dt))
-
-        tz = arrow.get(self.start_date).tzinfo
-
-        tides = []
-        for start_dt, end_dt in date_windows:
             req = requests.get(
                 f"https://api.iwls-sine.azure.cloud-nuage.dfo-mpo.gc.ca/api/v1/stations/{self.station.id}/data?time-series-code=wlp&from={start_dt}&to={end_dt}&resolution=FIFTEEN_MINUTES"
             )
@@ -128,7 +121,7 @@ class StationTides:
 
         # Convert tz back
         for i, t in enumerate(tides):
-            tides[i].time = arrow.get(t.time).to(tz).datetime
+            tides[i].time = arrow.get(t.time).to(self.tz).datetime
 
         return tides
 
@@ -152,14 +145,14 @@ class StationTides:
                 f((t - timedelta(minutes=1)).timestamp()) > 0 for t in dts
             ]
 
+            ws, we = None, None
             if len(dts) == 2:
-                ws, we = dts
+                ws = arrow.get(dts[0]).to(self.tz).datetime
+                we = arrow.get(dts[1]).to(self.tz).datetime
             elif len(dts) == 1 and is_window_start[0]:
-                ws, we = dts[0], None
+                ws = arrow.get(dts[0]).to(self.tz).datetime
             elif len(dts) == 1 and not is_window_start[0]:
-                ws, we = None, dts[0]
-            else:
-                ws, we = None, None
+                we = arrow.get(dts[0]).to(self.tz).datetime
 
             window = TideWindow(start=ws, end=we)
             windows.append(window)
@@ -172,19 +165,27 @@ class StationTides:
 
     def get_sunrise(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.sunrise(self._observer, date_)
+            return (
+                arrow.get(astral.sun.sunrise(self._observer, date_))
+                .to(self.tz)
+                .datetime
+            )
         except ValueError:
             return None
 
     def get_noon(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.noon(self._observer, date_)
+            return (
+                arrow.get(astral.sun.noon(self._observer, date_)).to(self.tz).datetime
+            )
         except ValueError:
             return None
 
     def get_sunset(self, date_: date) -> datetime | None:
         try:
-            return astral.sun.sunset(self._observer, date_)
+            return (
+                arrow.get(astral.sun.sunset(self._observer, date_)).to(self.tz).datetime
+            )
         except ValueError:
             return None
 
@@ -281,6 +282,7 @@ if __name__ == "__main__":
         "Adams Harbour",
         datetime(2024, 6, 1),
         datetime(2024, 6, 5),
+        tz="America/Vancouver",
     )
     events = station_tides.low_tide_events(tide_windows=[1.5, 2.0])
     df = pl.DataFrame(expand_windows(events))

@@ -90,7 +90,10 @@ def interactive_tide_graph(
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
 
     station_tides = StationTides(
-        station, start_date=start_date.datetime, end_date=end_date.datetime
+        station,
+        start_date=start_date.date(),
+        end_date=end_date.date(),
+        tz=tz,
     )
     windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
 
@@ -107,51 +110,79 @@ def interactive_tide_graph(
     )
     if show_low_tides:
         for lt in station_tides.low_tides:
+            d = arrow.Arrow.fromdatetime(lt.time)
             fig.add_vline(
-                x=arrow.get(lt.time).to(tz).datetime, line_dash="dash", line_color="red"
+                x=d.replace(tzinfo="local").timestamp() * 1000,
+                line_dash="dash",
+                line_color="red",
+                annotation_text="low tide",
+                annotation_position="bottom right",
+                annotation_hovertext=f"{d.format('HH:mm')} - {lt.height:.2f}m",
             )
     if show_high_tides:
         for ht in station_tides.high_tides:
+            d = arrow.Arrow.fromdatetime(ht.time)
             fig.add_vline(
-                x=arrow.get(ht.time).to(tz).datetime,
+                x=d.replace(tzinfo="local").timestamp() * 1000,
                 line_dash="dash",
-                line_color="green",
+                line_color="red",
+                annotation_text="high tide",
+                annotation_position="top right",
+                annotation_hovertext=f"{d.format('HH:mm')} - {ht.height:.2f}m",
             )
 
     for win in windows_xm:
         for w in win:
             if w.start:
+                d = arrow.Arrow.fromdatetime(w.start)
                 fig.add_vline(
-                    x=arrow.get(w.start).to(tz).datetime,
+                    x=d.replace(tzinfo="local").timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
+                    annotation_text="start",
+                    annotation_position="bottom right",
+                    annotation_hovertext=d.format("HH:mm"),
                 )
             if w.end:
+                d = arrow.Arrow.fromdatetime(w.end)
                 fig.add_vline(
-                    x=arrow.get(w.end).to(tz).datetime,
+                    x=d.replace(tzinfo="local").timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
+                    annotation_text="end",
+                    annotation_position="bottom right",
+                    annotation_hovertext=d.format("HH:mm"),
                 )
 
     for day in arrow.Arrow.range(
         "day", start_date.datetime, end_date.shift(days=-1).datetime, tz=tz
     ):
-        if show_sunrise and (sunrise := station_tides.get_sunrise(day)):
+        if show_sunrise and (sunrise := station_tides.get_sunrise(day.date())):
+            d = arrow.Arrow.fromdatetime(sunrise)
             fig.add_vline(
-                x=arrow.get(sunrise).to(tz).datetime,
+                x=d.replace(tzinfo="local").timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
+                annotation_text="sunrise",
+                annotation_hovertext=d.format("HH:mm"),
             )
-        if show_sunset and (sunset := station_tides.get_sunset(day)):
+        if show_sunset and (sunset := station_tides.get_sunset(day.date())):
+            d = arrow.Arrow.fromdatetime(sunset)
             fig.add_vline(
-                x=arrow.get(sunset).to(tz).datetime,
+                x=d.replace(tzinfo="local").timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
+                annotation_text="sunset",
+                annotation_hovertext=d.format("HH:mm"),
             )
     if show_current_time:
-        d = arrow.now(tz).datetime
+        d = arrow.now(tz)
         if start_date < d < end_date:
-            fig.add_vline(x=d, line_dash="dash", line_color="black")
+            fig.add_vline(
+                x=d.replace(tzinfo="local").timestamp() * 1000,
+                line_dash="dash",
+                line_color="black",
+            )
 
     fig.update_layout(title_x=0.5, xaxis_title=None)
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
@@ -230,7 +261,10 @@ def generate_tide_graph_image(
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
 
     station_tides = StationTides(
-        station, start_date=start_date.datetime, end_date=end_date.datetime
+        station,
+        start_date=start_date.date(),
+        end_date=end_date.date(),
+        tz=tz,
     )
     windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
 
@@ -366,7 +400,10 @@ def get_tides_for_station_between_dates_as_csv(
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
 
     station_tides = StationTides(
-        station, start_date=start_date.datetime, end_date=end_date.datetime
+        station,
+        start_date=start_date.date(),
+        end_date=end_date.date(),
+        tz=tz,
     )
 
     sheet = station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
@@ -427,7 +464,10 @@ def get_tides_for_station_between_dates(
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
 
     station_tides = StationTides(
-        station, start_date=start_date.datetime, end_date=end_date.datetime
+        station,
+        start_date=start_date.date(),
+        end_date=end_date.date(),
+        tz=tz,
     )
 
     return station_tides.low_tide_events(tz=tz, tide_windows=tide_window)

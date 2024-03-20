@@ -58,6 +58,6 @@ def get_tides_for_station(
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
 
     station_tides = StationTides(
-        station, start_date=start_date.datetime, end_date=end_date.datetime
+        station, start_date=start_date.date(), end_date=end_date.date(), tz=tz
     )
     return station_tides.tides
