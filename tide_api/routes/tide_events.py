@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
 from matplotlib import pyplot as plt, dates as mdates
+from plotly.graph_objs.layout import Annotation
 
 from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES, TF
 from tide_api.lib import expand_windows, StationTides
@@ -115,6 +116,11 @@ def interactive_tide_graph(
                 x=d.timestamp() * 1000,
                 y=lt.height,
                 text=d.format("HH:mm"),
+                align="center",
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=-25,
             )
     if show_high_tides:
         for ht in station_tides.high_tides:
@@ -123,6 +129,11 @@ def interactive_tide_graph(
                 x=d.timestamp() * 1000,
                 y=ht.height,
                 text=d.format("HH:mm"),
+                align="center",
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=25,
             )
 
     for win in windows_xm:
