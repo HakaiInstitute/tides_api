@@ -1,6 +1,6 @@
 import io
 from datetime import datetime, date
-from typing import Any
+from typing import Any, Annotated
 
 import arrow
 import dateutil.tz
@@ -10,9 +10,8 @@ from fastapi import APIRouter
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
 from matplotlib import pyplot as plt, dates as mdates
-from timezonefinder import timezonefinder
 
-from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES
+from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES, TF
 from tide_api.lib import expand_windows, StationTides
 from tide_api.models import (
     TideEvent,
@@ -33,46 +32,52 @@ def parse_tz_date(dt: Any, tz: str) -> datetime:
 
 @router.get("/{station_name}/plot", response_class=HTMLResponse)
 def interactive_tide_graph(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: date = Query(
-        None,
-        description="The start date in ISO8601 format",
-        openapi_examples=ISO8601_START_EXAMPLES,
-    ),
-    end_date: date = Query(
-        None,
-        description="The end date in ISO8601 format.",
-        openapi_examples=ISO8601_END_EXAMPLES,
-    ),
-    tz: str = Query(
-        None,
-        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
-    ),
-    div_only: bool = Query(
-        False, description="Return a div instead of full HTML page."
-    ),
-    tide_window: list[float] = Query(
-        [], description="Tide windows to find (in meters)"
-    ),
-    show_sunrise: bool = Query(
-        False, description="Display sunrise time as yellow line"
-    ),
-    show_sunset: bool = Query(False, description="Display sunset time as yellow line"),
-    show_current_time: bool = Query(
-        True, description="Display current time as black dashed line"
-    ),
-    show_high_tides: bool = Query(
-        False, description="Display high tides as red dashed line"
-    ),
-    show_low_tides: bool = Query(
-        False, description="Display low tides as green dashed line"
-    ),
+    station_name: Annotated[StationName, Path(description="The name of the station")],
+    start_date: Annotated[
+        date | None,
+        Query(
+            description="The start date in ISO8601 format",
+            openapi_examples=ISO8601_START_EXAMPLES,
+        ),
+    ] = None,
+    end_date: Annotated[
+        date | None,
+        Query(
+            description="The end date in ISO8601 format",
+            openapi_examples=ISO8601_END_EXAMPLES,
+        ),
+    ] = None,
+    tz: Annotated[
+        str | None,
+        Query(
+            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
+        ),
+    ] = None,
+    tide_window: Annotated[
+        list[float] | None, Query(description="Tide windows to find (in meters)")
+    ] = None,
+    show_sunrise: Annotated[
+        bool, Query(description="Display sunrise time as yellow line")
+    ] = False,
+    show_sunset: Annotated[
+        bool, Query(description="Display sunset time as yellow line")
+    ] = False,
+    show_current_time: Annotated[
+        bool, Query(description="Display current time as black dashed line")
+    ] = True,
+    show_high_tides: Annotated[
+        bool, Query(description="Display high tides as red dashed line")
+    ] = False,
+    show_low_tides: Annotated[
+        bool, Query(description="Display low tides as green dashed line")
+    ] = False,
+    div_only: Annotated[
+        bool, Query(description="Return a div instead of full HTML page.")
+    ] = False,
 ):
     station = FullStation.from_name(station_name.value)
     tz = (
-        timezonefinder.TimezoneFinder().timezone_at(
-            lat=station.latitude, lng=station.longitude
-        )
+        TF.timezone_at(lat=station.latitude, lng=station.longitude)
         if tz is None
         else tz
     )
@@ -83,6 +88,9 @@ def interactive_tide_graph(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    if tide_window is None:
+        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -164,46 +172,52 @@ def interactive_tide_graph(
     },
 )
 def generate_tide_graph_image(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: date = Query(
-        None,
-        description="The start date in ISO8601 format",
-        openapi_examples=ISO8601_START_EXAMPLES,
-    ),
-    end_date: date = Query(
-        None,
-        description="The end date in ISO8601 format.",
-        openapi_examples=ISO8601_END_EXAMPLES,
-    ),
-    tz: str = Query(
-        None,
-        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
-    ),
-    width: int = Query(640, description="Width of the plot in pixels"),
-    height: int = Query(480, description="Height of the plot in pixels"),
-    dpi: int = Query(100, description="DPI of the plot"),
-    tide_window: list[float] = Query(
-        [], description="Tide windows to find (in meters)"
-    ),
-    show_sunrise: bool = Query(
-        False, description="Display sunrise time as yellow line"
-    ),
-    show_sunset: bool = Query(False, description="Display sunset time as yellow line"),
-    show_current_time: bool = Query(
-        True, description="Display current time as black dashed line"
-    ),
-    show_high_tides: bool = Query(
-        True, description="Display high tides as red dashed line"
-    ),
-    show_low_tides: bool = Query(
-        True, description="Display low tides as green dashed line"
-    ),
+    station_name: Annotated[StationName, Path(description="The name of the station")],
+    start_date: Annotated[
+        date | None,
+        Query(
+            description="The start date in ISO8601 format",
+            openapi_examples=ISO8601_START_EXAMPLES,
+        ),
+    ] = None,
+    end_date: Annotated[
+        date | None,
+        Query(
+            description="The end date in ISO8601 format",
+            openapi_examples=ISO8601_END_EXAMPLES,
+        ),
+    ] = None,
+    tz: Annotated[
+        str | None,
+        Query(
+            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
+        ),
+    ] = None,
+    tide_window: Annotated[
+        list[float] | None, Query(description="Tide windows to find (in meters)")
+    ] = None,
+    show_sunrise: Annotated[
+        bool, Query(description="Display sunrise time as yellow line")
+    ] = False,
+    show_sunset: Annotated[
+        bool, Query(description="Display sunset time as yellow line")
+    ] = False,
+    show_current_time: Annotated[
+        bool, Query(description="Display current time as black dashed line")
+    ] = True,
+    show_high_tides: Annotated[
+        bool, Query(description="Display high tides as red dashed line")
+    ] = True,
+    show_low_tides: Annotated[
+        bool, Query(description="Display low tides as green dashed line")
+    ] = True,
+    width: Annotated[int, Query(description="Width of the plot in pixels")] = 640,
+    height: Annotated[int, Query(description="Height of the plot in pixels")] = 480,
+    dpi: Annotated[int, Query(description="DPI of the plot")] = 100,
 ):
     station = FullStation.from_name(station_name.value)
     tz = (
-        timezonefinder.TimezoneFinder().timezone_at(
-            lat=station.latitude, lng=station.longitude
-        )
+        TF.timezone_at(lat=station.latitude, lng=station.longitude)
         if tz is None
         else tz
     )
@@ -214,6 +228,9 @@ def generate_tide_graph_image(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    if tide_window is None:
+        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -312,31 +329,34 @@ def generate_tide_graph_image(
     },
 )
 def get_tides_for_station_between_dates_as_csv(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: date = Query(
-        None,
-        description="The start date in ISO8601 format",
-        openapi_examples=ISO8601_START_EXAMPLES,
-    ),
-    end_date: date = Query(
-        None,
-        description="The end date in ISO8601 format",
-        openapi_examples=ISO8601_END_EXAMPLES,
-    ),
-    tz: str = Query(
-        None,
-        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
-    ),
-    tide_window: list[float] = Query(
-        [],
-        description="Tide windows to find (in meters)",
-    ),
+    station_name: Annotated[StationName, Path(description="The name of the station")],
+    start_date: Annotated[
+        date | None,
+        Query(
+            description="The start date in ISO8601 format",
+            openapi_examples=ISO8601_START_EXAMPLES,
+        ),
+    ] = None,
+    end_date: Annotated[
+        date | None,
+        Query(
+            description="The end date in ISO8601 format",
+            openapi_examples=ISO8601_END_EXAMPLES,
+        ),
+    ] = None,
+    tz: Annotated[
+        str | None,
+        Query(
+            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
+        ),
+    ] = None,
+    tide_window: Annotated[
+        list[float] | None, Query(description="Tide windows to find (in meters)")
+    ] = None,
 ):
     station = FullStation.from_name(station_name.value)
     tz = (
-        timezonefinder.TimezoneFinder().timezone_at(
-            lat=station.latitude, lng=station.longitude
-        )
+        TF.timezone_at(lat=station.latitude, lng=station.longitude)
         if tz is None
         else tz
     )
@@ -347,6 +367,9 @@ def get_tides_for_station_between_dates_as_csv(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    if tide_window is None:
+        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime
@@ -370,31 +393,34 @@ def get_tides_for_station_between_dates_as_csv(
 
 @router.get("/{station_name}")
 def get_tides_for_station_between_dates(
-    station_name: StationName = Path(..., description="The name of the station"),
-    start_date: date = Query(
-        None,
-        description="The start date in ISO8601 format",
-        openapi_examples=ISO8601_START_EXAMPLES,
-    ),
-    end_date: date = Query(
-        None,
-        description="The end date in ISO8601 format",
-        openapi_examples=ISO8601_END_EXAMPLES,
-    ),
-    tz: str = Query(
-        None,
-        description="The timezone to use. If not provided, it will be inferred from the station's coordinates.",
-    ),
-    tide_window: list[float] = Query(
-        [],
-        description="Tide windows to find (in meters)",
-    ),
+    station_name: Annotated[StationName, Path(description="The name of the station")],
+    start_date: Annotated[
+        date | None,
+        Query(
+            description="The start date in ISO8601 format",
+            openapi_examples=ISO8601_START_EXAMPLES,
+        ),
+    ] = None,
+    end_date: Annotated[
+        date | None,
+        Query(
+            description="The end date in ISO8601 format",
+            openapi_examples=ISO8601_END_EXAMPLES,
+        ),
+    ] = None,
+    tz: Annotated[
+        str | None,
+        Query(
+            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
+        ),
+    ] = None,
+    tide_window: Annotated[
+        list[float] | None, Query(description="Tide windows to find (in meters)")
+    ] = None,
 ) -> list[TideEvent]:
     station = FullStation.from_name(station_name.value)
     tz = (
-        timezonefinder.TimezoneFinder().timezone_at(
-            lat=station.latitude, lng=station.longitude
-        )
+        TF.timezone_at(lat=station.latitude, lng=station.longitude)
         if tz is None
         else tz
     )
@@ -405,6 +431,9 @@ def get_tides_for_station_between_dates(
         else arrow.get(start_date, tz)
     )
     end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+
+    if tide_window is None:
+        tide_window = []
 
     station_tides = StationTides(
         station, start_date=start_date.datetime, end_date=end_date.datetime

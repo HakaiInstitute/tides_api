@@ -1,3 +1,5 @@
+from timezonefinder import TimezoneFinder
+
 OPENAPI_TAGS = [
     {
         "name": "Stations",
@@ -25,3 +27,5 @@ ISO8601_END_EXAMPLES = {
         "value": "2024-08-03",
     },
 }
+
+TF = TimezoneFinder()

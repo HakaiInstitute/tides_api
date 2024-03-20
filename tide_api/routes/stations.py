@@ -1,3 +1,5 @@
+from typing import Annotated
+
 import plotly.express as px
 import polars as pl
 from fastapi import APIRouter
@@ -14,9 +16,9 @@ router = APIRouter(
 
 @router.get("")
 def list_stations(
-    include_coords: bool = Query(
-        True, description="Include station coordinates in the response"
-    )
+    include_coords: Annotated[
+        bool, Query(description="Include station coordinates in the response")
+    ] = True
 ) -> list[Station] | list[StationWithoutCoords]:
     cls = Station if include_coords else StationWithoutCoords
     return list(map(cls.parse_obj, STATIONS))
@@ -24,7 +26,9 @@ def list_stations(
 
 @router.get("/map", response_class=HTMLResponse)
 def show_map(
-    div_only: bool = Query(False, description="Return a div instead of full HTML page.")
+    div_only: Annotated[
+        bool, Query(description="Return a div instead of full HTML page.")
+    ] = False
 ):
     df = pl.DataFrame(list_stations()).to_pandas()
     fig = px.scatter_mapbox(
