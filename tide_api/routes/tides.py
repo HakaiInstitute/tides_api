@@ -20,7 +20,7 @@ router = APIRouter(
 
 
 @router.get("/{station_name}")
-def get_tides_for_station(
+def tides_as_json(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
         date | None,

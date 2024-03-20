@@ -28,7 +28,7 @@ def parse_tz_date(dt: Any, tz: str) -> datetime:
 
 
 @router.get("/{station_name}/plot", response_class=HTMLResponse)
-def interactive_tide_graph(
+def interactive_tide_plot(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
         date | None,
@@ -219,7 +219,7 @@ def interactive_tide_graph(
         },
     },
 )
-def get_tides_for_station_between_dates_as_csv(
+def tides_events_as_csv(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
         date | None,
@@ -283,7 +283,7 @@ def get_tides_for_station_between_dates_as_csv(
 
 
 @router.get("/{station_name}")
-def get_tides_for_station_between_dates(
+def tides_events_as_json(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
         date | None,
