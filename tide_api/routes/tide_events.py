@@ -63,7 +63,7 @@ def interactive_tide_graph(
         bool, Query(description="Display sunset time as yellow line")
     ] = True,
     show_current_time: Annotated[
-        bool, Query(description="Display current time as black dashed line")
+        bool, Query(description="Annotate current time as red dot.")
     ] = True,
     show_high_tides: Annotated[
         bool, Query(description="Annotate high tide times")
@@ -180,7 +180,7 @@ def interactive_tide_graph(
                 x=[d.timestamp() * 1000],
                 y=[height],
                 mode="markers",
-                marker=dict(color="black", size=10),
+                marker=dict(color="red", size=10),
                 name="Current Time",
                 hoverinfo="text",
                 hoverinfosrc="x",
