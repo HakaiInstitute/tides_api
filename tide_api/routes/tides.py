@@ -36,6 +36,12 @@ def tides_as_json(
             openapi_examples=ISO8601_END_EXAMPLES,
         ),
     ] = None,
+    num_days: Annotated[
+        int | None,
+        Query(
+            description="Number of days to display. Cannot be used with end_date.", gt=0
+        ),
+    ] = None,
     tz: Annotated[
         str | None,
         Query(
@@ -55,7 +61,12 @@ def tides_as_json(
         if start_date is None
         else arrow.get(start_date, tz)
     )
-    end_date = start_date.shift(days=1) if end_date is None else arrow.get(end_date, tz)
+    if end_date and num_days:
+        raise ValueError("Cannot use both end_date and num_days")
+    elif end_date:
+        end_date = arrow.get(end_date, tz)
+    else:
+        end_date = start_date.shift(days=(num_days if num_days is not None else 1))
 
     station_tides = StationTides(
         station, start_date=start_date.date(), end_date=end_date.date(), tz=tz
