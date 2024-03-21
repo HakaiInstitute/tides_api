@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import requests
 from ratelimit import limits, sleep_and_retry
 
@@ -14,6 +16,7 @@ class _CHSApi:
         """Check CHS rate limit."""
         return
 
+    @lru_cache()
     def get(self, url):
         self._rate_limit()
         return requests.get(f"{self.base_url}{url}")
