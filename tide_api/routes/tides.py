@@ -4,7 +4,7 @@ from typing import Annotated
 import arrow
 import plotly.express as px
 import polars as pl
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
 
@@ -29,6 +29,7 @@ router = APIRouter(
 
 @router.get("/plot/{station_name}", tags=["Plots"], response_class=HTMLResponse)
 def plot_tide_data_for_station(
+    request: Request,
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
         date | None,
@@ -105,23 +106,20 @@ def plot_tide_data_for_station(
     )
     windows_xm = [station_tides.detect_tide_windows(w) for w in tide_window]
 
-    df = pl.DataFrame(
-        station_tides.tides, schema_overrides={"time": pl.Datetime(time_zone=tz)}
-    )
     fig = px.line(
-        df,
-        x="time",
-        y="height",
+        x=[t * 1000 for t in station_tides.timestamps],
+        y=station_tides.heights,
         title=f"Tides for {station_name.value}",
-        labels={"time": "Time", "height": "Height (m)"},
+        labels={"x": "Time", "y": "Height (m)"},
         template="plotly",
     )
+    fig.update_layout(xaxis=dict(type="date"))
+
     if show_low_tides:
         for lt in station_tides.low_tides:
             d = arrow.Arrow.fromdatetime(lt.time)
             fig.add_annotation(
-                x=d.replace(tzinfo="America/Vancouver").timestamp()
-                * 1000,  # Weird hack to fix misalignment
+                x=d.timestamp() * 1000,
                 y=lt.height,
                 text=d.format("HH:mm"),
                 align="center",
@@ -134,8 +132,7 @@ def plot_tide_data_for_station(
         for ht in station_tides.high_tides:
             d = arrow.Arrow.fromdatetime(ht.time)
             fig.add_annotation(
-                x=d.replace(tzinfo="America/Vancouver").timestamp()
-                * 1000,  # Weird hack to fix misalignment
+                x=d.timestamp() * 1000,
                 y=ht.height,
                 text=d.format("HH:mm"),
                 align="center",
@@ -150,8 +147,7 @@ def plot_tide_data_for_station(
             if w.start:
                 d = arrow.Arrow.fromdatetime(w.start)
                 fig.add_vline(
-                    x=d.replace(tzinfo="America/Vancouver").timestamp()
-                    * 1000,  # Weird hack to fix misalignment
+                    x=d.timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="start",
@@ -161,8 +157,7 @@ def plot_tide_data_for_station(
             if w.end:
                 d = arrow.Arrow.fromdatetime(w.end)
                 fig.add_vline(
-                    x=d.replace(tzinfo="America/Vancouver").timestamp()
-                    * 1000,  # Weird hack to fix misalignment
+                    x=d.timestamp() * 1000,
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="end",
@@ -176,8 +171,7 @@ def plot_tide_data_for_station(
         if show_sunrise and (sunrise := station_tides.get_sunrise(day.date())):
             d = arrow.Arrow.fromdatetime(sunrise)
             fig.add_vline(
-                x=d.replace(tzinfo="America/Vancouver").timestamp()
-                * 1000,  # Weird hack to fix misalignment
+                x=d.timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunrise",
@@ -187,8 +181,7 @@ def plot_tide_data_for_station(
         if show_sunset and (sunset := station_tides.get_sunset(day.date())):
             d = arrow.Arrow.fromdatetime(sunset)
             fig.add_vline(
-                x=d.replace(tzinfo="America/Vancouver").timestamp()
-                * 1000,  # Weird hack to fix misalignment
+                x=d.timestamp() * 1000,
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunset",
@@ -202,7 +195,7 @@ def plot_tide_data_for_station(
 
             # Add point marker
             fig.add_scatter(
-                x=[d.replace(tzinfo="America/Vancouver").timestamp() * 1000],
+                x=[d.timestamp() * 1000],
                 y=[height],
                 mode="markers",
                 marker=dict(color="red", size=10),

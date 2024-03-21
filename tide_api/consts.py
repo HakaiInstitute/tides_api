@@ -12,7 +12,7 @@ OPENAPI_TAGS = [
     {
         "name": "Plots",
         "description": "Interactive plots and maps",
-    }
+    },
 ]
 
 ISO8601_START_EXAMPLES = {
