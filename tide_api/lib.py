@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, tzinfo
 
 import arrow
 import astral
@@ -210,7 +210,7 @@ class StationTides:
 
     def low_tide_events(
         self,
-        tz: str = "America/Vancouver",
+        tz: str,
         tide_windows: list[float] = None,
     ) -> list[TideEvent]:
         if tide_windows is None:
@@ -277,10 +277,10 @@ def split_tides_by_datetimes(
     return tide_partitions
 
 
-def format_time(datetime, tz="America/Vancouver") -> str | None:
-    if datetime is None:
+def format_time(dt: datetime, tz: str | tzinfo) -> str | None:
+    if dt is None:
         return None
-    return arrow.get(datetime).to(tz).isoformat(timespec="seconds")
+    return arrow.get(dt).to(tz).isoformat(timespec="seconds")
 
 
 def expand_windows(sheet: list[TideEvent]) -> list[dict]:

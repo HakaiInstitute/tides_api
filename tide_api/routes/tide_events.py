@@ -1,5 +1,5 @@
-from datetime import datetime, date
-from typing import Any, Annotated
+from datetime import date
+from typing import Annotated
 
 import arrow
 import plotly.express as px
@@ -21,10 +21,6 @@ router = APIRouter(
     prefix="/tides/events",
     tags=["Tide Events"],
 )
-
-
-def parse_tz_date(dt: Any, tz: str) -> datetime:
-    return arrow.get(dt, tz).datetime
 
 
 @router.get("/{station_name}/plot", response_class=HTMLResponse)
@@ -109,7 +105,8 @@ def interactive_tide_plot(
         for lt in station_tides.low_tides:
             d = arrow.Arrow.fromdatetime(lt.time)
             fig.add_annotation(
-                x=d.timestamp() * 1000,
+                x=d.replace(tzinfo="America/Vancouver").timestamp()
+                * 1000,  # Weird hack to fix misalignment
                 y=lt.height,
                 text=d.format("HH:mm"),
                 align="center",
@@ -122,7 +119,8 @@ def interactive_tide_plot(
         for ht in station_tides.high_tides:
             d = arrow.Arrow.fromdatetime(ht.time)
             fig.add_annotation(
-                x=d.timestamp() * 1000,
+                x=d.replace(tzinfo="America/Vancouver").timestamp()
+                * 1000,  # Weird hack to fix misalignment
                 y=ht.height,
                 text=d.format("HH:mm"),
                 align="center",
@@ -137,7 +135,8 @@ def interactive_tide_plot(
             if w.start:
                 d = arrow.Arrow.fromdatetime(w.start)
                 fig.add_vline(
-                    x=d.timestamp() * 1000,
+                    x=d.replace(tzinfo="America/Vancouver").timestamp()
+                    * 1000,  # Weird hack to fix misalignment
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="start",
@@ -147,7 +146,8 @@ def interactive_tide_plot(
             if w.end:
                 d = arrow.Arrow.fromdatetime(w.end)
                 fig.add_vline(
-                    x=d.timestamp() * 1000,
+                    x=d.replace(tzinfo="America/Vancouver").timestamp()
+                    * 1000,  # Weird hack to fix misalignment
                     line_dash="dot",
                     line_color="blue",
                     annotation_text="end",
@@ -161,7 +161,8 @@ def interactive_tide_plot(
         if show_sunrise and (sunrise := station_tides.get_sunrise(day.date())):
             d = arrow.Arrow.fromdatetime(sunrise)
             fig.add_vline(
-                x=d.timestamp() * 1000,
+                x=d.replace(tzinfo="America/Vancouver").timestamp()
+                * 1000,  # Weird hack to fix misalignment
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunrise",
@@ -171,7 +172,8 @@ def interactive_tide_plot(
         if show_sunset and (sunset := station_tides.get_sunset(day.date())):
             d = arrow.Arrow.fromdatetime(sunset)
             fig.add_vline(
-                x=d.timestamp() * 1000,
+                x=d.replace(tzinfo="America/Vancouver").timestamp()
+                * 1000,  # Weird hack to fix misalignment
                 line_dash="dash",
                 line_color="yellow",
                 annotation_text="sunset",
@@ -185,7 +187,7 @@ def interactive_tide_plot(
 
             # Add point marker
             fig.add_scatter(
-                x=[d.timestamp() * 1000],
+                x=[d.replace(tzinfo="America/Vancouver").timestamp() * 1000],
                 y=[height],
                 mode="markers",
                 marker=dict(color="red", size=10),

@@ -23,7 +23,7 @@ app = FastAPI(
 @app.get("/", include_in_schema=False)
 def redirect_to_docs():
     # Redirect to docs
-    return RedirectResponse(url=app.root_path + app.docs_url)
+    return RedirectResponse(url=app.docs_url)
 
 
 app.include_router(stations_router)
