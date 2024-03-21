@@ -24,8 +24,8 @@ def list_stations(
     return list(map(cls.parse_obj, STATIONS))
 
 
-@router.get("/map", response_class=HTMLResponse)
-def show_map(
+@router.get("/map", tags=["Plots"], response_class=HTMLResponse)
+def stations_map(
     div_only: Annotated[
         bool, Query(description="Return a div instead of full HTML page.")
     ] = False

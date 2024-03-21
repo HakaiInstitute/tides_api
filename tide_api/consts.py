@@ -6,13 +6,13 @@ OPENAPI_TAGS = [
         "description": "Get information about tide stations",
     },
     {
-        "name": "Tide Events",
-        "description": "Get tide events for a given station",
-    },
-    {
         "name": "Tides",
         "description": "Get tides for a given station",
     },
+    {
+        "name": "Plots",
+        "description": "Interactive plots and maps",
+    }
 ]
 
 ISO8601_START_EXAMPLES = {

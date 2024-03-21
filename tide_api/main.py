@@ -5,13 +5,12 @@ from fastapi.responses import RedirectResponse
 
 from tide_api.consts import OPENAPI_TAGS
 from tide_api.routes import stations_router
-from tide_api.routes import tide_events_router
 from tide_api.routes import tides_router
 
 app = FastAPI(
-    title="Tide Window API",
+    title="Tides API",
     version="0.1.0alpha",
-    description="API to get tide windows for a given station between two dates.   \n"
+    description="API to get tide data for CHS stations.   \n"
     "*Warning: This tool is in development. "
     "Results may not be accurate and URLs may change. Use at your own risk.*",
     root_path=os.getenv("ROOT_PATH", ""),
@@ -26,9 +25,8 @@ def redirect_to_docs():
     return RedirectResponse(url=app.docs_url)
 
 
-app.include_router(stations_router)
-app.include_router(tide_events_router)
 app.include_router(tides_router)
+app.include_router(stations_router)
 
 
 if __name__ == "__main__":
