@@ -66,3 +66,5 @@ cover/
 __pypackages__/
 
 .idea/
+
+CLAUDE.md
