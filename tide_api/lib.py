@@ -136,7 +136,7 @@ class StationTides:
             )
             if not req.ok:
                 raise Exception(f"Failed to get tides: {req.text}")
-            tides.extend([FullTideMeasurement.parse_obj(t) for t in req.json()])
+            tides.extend([FullTideMeasurement.model_validate(t) for t in req.json()])
 
         # Convert tz back
         for i, t in enumerate(tides):

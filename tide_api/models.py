@@ -112,7 +112,7 @@ def get_station_options() -> list[FullStation]:
     station_req = chs_api.get("/stations")
     if station_req.ok:
         station_data = station_req.json()
-        station_data = [FullStation.parse_obj(d) for d in station_data]
+        station_data = [FullStation.model_validate(d) for d in station_data]
         station_data = sorted(station_data, key=lambda s: s.name)
         station_data = filter(
             lambda s: any([t.code == "wlp" for t in s.time_series]), station_data
