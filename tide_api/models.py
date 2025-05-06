@@ -1,9 +1,9 @@
 import enum
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, computed_field, AliasChoices
+from pydantic import AliasChoices, BaseModel, Field, computed_field
 
 from tide_api.utils import chs_api
 

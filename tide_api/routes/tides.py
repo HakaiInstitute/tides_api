@@ -8,16 +8,13 @@ from fastapi import APIRouter, Request
 from fastapi.params import Path, Query
 from fastapi.responses import HTMLResponse
 
-from tide_api.consts import ISO8601_START_EXAMPLES, ISO8601_END_EXAMPLES, TF
-from tide_api.lib import StationTides
-from tide_api.lib import expand_windows
+from tide_api.consts import ISO8601_END_EXAMPLES, ISO8601_START_EXAMPLES, TF
+from tide_api.lib import StationTides, expand_windows
 from tide_api.models import (
-    TideEvent,
-)
-from tide_api.models import (
-    TideMeasurement,
-    StationName,
     FullStation,
+    StationName,
+    TideEvent,
+    TideMeasurement,
 )
 from tide_api.responses import CSVResponse
 
@@ -292,7 +289,7 @@ def tides_events_for_station_as_csv(
     df = df.with_columns([pl.col(pl.Datetime).dt.replace_time_zone(tz)])
 
     filename = (
-        f'{station_name.value.lower().replace(" ", "_")}'
+        f"{station_name.value.lower().replace(' ', '_')}"
         f"_tides_"
         f"{start_date.date()}_to_{end_date.date()}.csv"
     )
@@ -387,22 +384,22 @@ def tide_at_time_for_station_as_json(
         if tz is None
         else tz
     )
-    
+
     # Convert datetime to Arrow object with timezone
     query_time = arrow.get(date_time).to(tz)
-    
+
     # Create StationTides object with a day range around the query time
     # This ensures we have enough data to interpolate
     start_date = query_time.shift(days=-1).date()
     end_date = query_time.shift(days=1).date()
-    
+
     station_tides = StationTides(
         station, start_date=start_date, end_date=end_date, tz=tz
     )
-    
+
     # Get interpolated tide height at the specific time
     tide_at_time = station_tides.get_tide_at_time(query_time.datetime)
-    
+
     return tide_at_time
 
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.params import Query
 from fastapi.responses import HTMLResponse
 
-from tide_api.models import Station, StationWithoutCoords, StationName, STATIONS
+from tide_api.models import STATIONS, Station, StationName, StationWithoutCoords
 
 router = APIRouter(
     prefix="/stations",
@@ -18,7 +18,7 @@ router = APIRouter(
 def list_stations(
     include_coords: Annotated[
         bool, Query(description="Include station coordinates in the response")
-    ] = True
+    ] = True,
 ) -> list[Station] | list[StationWithoutCoords]:
     cls = Station if include_coords else StationWithoutCoords
     return list(map(cls.parse_obj, STATIONS))
@@ -28,7 +28,7 @@ def list_stations(
 def stations_map(
     div_only: Annotated[
         bool, Query(description="Return a div instead of full HTML page.")
-    ] = False
+    ] = False,
 ):
     df = pl.DataFrame(list_stations()).to_pandas()
     fig = px.scatter_mapbox(
@@ -39,10 +39,7 @@ def stations_map(
         center=dict(lat=53.7267, lon=-127.6476),
         zoom=1,
     )
-    fig.update_layout(
-        mapbox_style="open-street-map",
-        margin=dict(r=0, l=0, b=0, t=0)
-    )
+    fig.update_layout(mapbox_style="open-street-map", margin=dict(r=0, l=0, b=0, t=0))
     config = {"scrollZoom": True, "displayModeBar": True}
     return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only), config=config)
 

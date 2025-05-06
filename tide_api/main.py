@@ -4,8 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from tide_api.consts import OPENAPI_TAGS
-from tide_api.routes import stations_router
-from tide_api.routes import tides_router
+from tide_api.routes import stations_router, tides_router
 
 app = FastAPI(
     title="Tides API",

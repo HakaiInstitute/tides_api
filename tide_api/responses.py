@@ -1,4 +1,4 @@
-from fastapi.responses import Response, PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 
 class PNGResponse(Response):
