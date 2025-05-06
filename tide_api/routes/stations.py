@@ -39,9 +39,12 @@ def stations_map(
         center=dict(lat=53.7267, lon=-127.6476),
         zoom=1,
     )
-    fig.update_layout(mapbox_style="open-street-map")
-    fig.update_layout(margin=dict(r=0, l=0, b=0, t=0))
-    return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only))
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin=dict(r=0, l=0, b=0, t=0)
+    )
+    config = {"scrollZoom": True, "displayModeBar": True}
+    return fig.to_html(include_plotlyjs="cdn", full_html=(not div_only), config=config)
 
 
 @router.get("/{station_name}")
