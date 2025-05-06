@@ -55,9 +55,21 @@ class StationTides:
     def get_tide_at_time(self, time: datetime) -> TideMeasurement:
         if time < self.start_date or time > self.end_date:
             raise ValueError("Time is out of range")
-
-        f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=3)
-        height = f(time.timestamp())
+            
+        # Check if there are enough data points for interpolation
+        if len(self.timestamps) < 4:  # Need at least k+1 points for k=3 spline
+            # If not enough points, use the closest point's height
+            if len(self.timestamps) == 0:
+                raise ValueError("No tide data available for interpolation")
+                
+            # Find closest tide measurement
+            closest_idx = min(range(len(self.timestamps)), 
+                             key=lambda i: abs(self.timestamps[i] - time.timestamp()))
+            height = self.heights[closest_idx]
+        else:
+            # Use spline interpolation when enough data points are available
+            f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=min(3, len(self.timestamps)-1))
+            height = f(time.timestamp())
 
         return TideMeasurement(time=time, height=height)
 
@@ -78,7 +90,15 @@ class StationTides:
         return split_tides_by_datetimes(self.tides, [t.time for t in self.high_tides])
 
     def _get_hilo_tides(self) -> tuple[list[TideMeasurement], list[TideMeasurement]]:
-        f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=4)
+        # Need at least k+1 points for k=4 spline
+        if len(self.timestamps) < 5:
+            # If insufficient data points, return empty lists
+            return [], []
+
+        # Determine appropriate k value based on number of data points
+        k = min(4, len(self.timestamps) - 1)
+        
+        f = InterpolatedUnivariateSpline(self.timestamps, self.heights, k=k)
         fp = f.derivative()
         rts = fp.roots()
 
@@ -99,12 +119,12 @@ class StationTides:
         ]
 
         low_tides = [
-            TideMeasurement(time=t, value=h)
+            TideMeasurement(time=t, height=h)  # Changed value to height to match model fields
             for t, h, is_low in zip(hilo_datetimes, hilo_heights, is_low_tide)
             if is_low
         ]
         high_tides = [
-            TideMeasurement(time=t, value=h)
+            TideMeasurement(time=t, height=h)  # Changed value to height to match model fields
             for t, h, is_high in zip(hilo_datetimes, hilo_heights, is_high_tide)
             if is_high
         ]
@@ -151,11 +171,14 @@ class StationTides:
             heights = [d.height for d in partition]
 
             if len(timestamps) <= 3:
-                windows.append((None, None))
+                windows.append(TideWindow(start=None, end=None))
                 continue
 
+            # Determine appropriate k value based on number of data points
+            k = min(3, len(timestamps) - 1)
+            
             f = InterpolatedUnivariateSpline(
-                timestamps, [(h - max_tide_height) for h in heights], k=3
+                timestamps, [(h - max_tide_height) for h in heights], k=k
             )
             rts = f.roots()
             dts = [arrow.get(rt).datetime for rt in rts]
