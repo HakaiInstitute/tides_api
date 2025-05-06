@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 import arrow
@@ -363,6 +363,47 @@ def tides_events_for_station_as_json(
     )
 
     return station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
+
+
+@router.get("/at/{station_name}")
+def tide_at_time_for_station_as_json(
+    station_name: Annotated[StationName, Path(description="The name of the station")],
+    date_time: Annotated[
+        datetime,
+        Query(
+            description="The date and time for the tide query in ISO8601 format (e.g., 2024-08-01T12:30:00)"
+        ),
+    ],
+    tz: Annotated[
+        str | None,
+        Query(
+            description="The timezone to use. If not provided, it will be inferred from the station's coordinates."
+        ),
+    ] = None,
+) -> TideMeasurement:
+    station = FullStation.from_name(station_name.value)
+    tz = (
+        TF.timezone_at(lat=station.latitude, lng=station.longitude)
+        if tz is None
+        else tz
+    )
+    
+    # Convert datetime to Arrow object with timezone
+    query_time = arrow.get(date_time).to(tz)
+    
+    # Create StationTides object with a day range around the query time
+    # This ensures we have enough data to interpolate
+    start_date = query_time.shift(days=-1).date()
+    end_date = query_time.shift(days=1).date()
+    
+    station_tides = StationTides(
+        station, start_date=start_date, end_date=end_date, tz=tz
+    )
+    
+    # Get interpolated tide height at the specific time
+    tide_at_time = station_tides.get_tide_at_time(query_time.datetime)
+    
+    return tide_at_time
 
 
 @router.get("/{station_name}")
