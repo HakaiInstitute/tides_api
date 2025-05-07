@@ -24,7 +24,13 @@ router = APIRouter(
 )
 
 
-@router.get("/plot/{station_name}", tags=["Plots"], response_class=HTMLResponse)
+@router.get(
+    "/plot/{station_name}",
+    tags=["Plots"],
+    response_class=HTMLResponse,
+    operation_id="plot_tides_for_station",
+    summary="Plot tide data for a specific station",
+)
 def plot_tide_data_for_station(
     request: Request,
     station_name: Annotated[StationName, Path(description="The name of the station")],
@@ -76,6 +82,7 @@ def plot_tide_data_for_station(
         bool, Query(description="Return a div instead of full HTML page.")
     ] = False,
 ):
+    """Plot tide data for a specific station for a specified time interval."""
     station = FullStation.from_name(station_name.value)
     tz = (
         TF.timezone_at(lat=station.latitude, lng=station.longitude)
@@ -225,6 +232,8 @@ def plot_tide_data_for_station(
             },
         },
     },
+    operation_id="tides_events_for_station_as_csv",
+    summary="Get tide events for a specific station as CSV",
 )
 def tides_events_for_station_as_csv(
     station_name: Annotated[StationName, Path(description="The name of the station")],
@@ -256,8 +265,9 @@ def tides_events_for_station_as_csv(
     ] = None,
     tide_window: Annotated[
         list[float], Query(description="Tide windows to find (in meters)")
-    ] = [],
+    ] = None,
 ):
+    """Get a list of tide events for a specific station in a specific time window as comma-separated values (CSV)."""
     station = FullStation.from_name(station_name.value)
     tz = (
         TF.timezone_at(lat=station.latitude, lng=station.longitude)
@@ -300,7 +310,11 @@ def tides_events_for_station_as_csv(
     )
 
 
-@router.get("/events/{station_name}")
+@router.get(
+    "/events/{station_name}",
+    operation_id="tides_events_for_station_as_json",
+    summary="Get tide events for a specific station",
+)
 def tides_events_for_station_as_json(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
@@ -331,8 +345,9 @@ def tides_events_for_station_as_json(
     ] = None,
     tide_window: Annotated[
         list[float], Query(description="Tide windows to find (in meters)")
-    ] = [],
+    ] = None,
 ) -> list[TideEvent]:
+    """Get a list of tide events for a specific station in a specific time window."""
     station = FullStation.from_name(station_name.value)
     tz = (
         TF.timezone_at(lat=station.latitude, lng=station.longitude)
@@ -362,7 +377,11 @@ def tides_events_for_station_as_json(
     return station_tides.low_tide_events(tz=tz, tide_windows=tide_window)
 
 
-@router.get("/at/{station_name}")
+@router.get(
+    "/at/{station_name}",
+    operation_id="tide_at_time_for_station_as_json",
+    summary="Get tide height at a specific time for a given station",
+)
 def tide_at_time_for_station_as_json(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     date_time: Annotated[
@@ -378,6 +397,7 @@ def tide_at_time_for_station_as_json(
         ),
     ] = None,
 ) -> TideMeasurement:
+    """Get the tide height at a specific time for a given station."""
     station = FullStation.from_name(station_name.value)
     tz = (
         TF.timezone_at(lat=station.latitude, lng=station.longitude)
@@ -403,7 +423,11 @@ def tide_at_time_for_station_as_json(
     return tide_at_time
 
 
-@router.get("/{station_name}")
+@router.get(
+    "/{station_name}",
+    operation_id="tides_for_station",
+    summary="Get tide data for a specific station",
+)
 def tides_for_station_as_json(
     station_name: Annotated[StationName, Path(description="The name of the station")],
     start_date: Annotated[
