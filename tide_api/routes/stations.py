@@ -21,7 +21,7 @@ def list_stations(
     ] = True,
 ) -> list[Station] | list[StationWithoutCoords]:
     cls = Station if include_coords else StationWithoutCoords
-    return list(map(cls.parse_obj, STATIONS))
+    return list(map(cls.model_validate, STATIONS))
 
 
 @router.get("/map", tags=["Plots"], response_class=HTMLResponse)
@@ -53,6 +53,6 @@ def station_info_by_name(
 ) -> Station | StationWithoutCoords:
     station = next(s for s in STATIONS if s.name == station_name.value)
     if include_coords:
-        return Station.parse_obj(station)
+        return Station.model_validate(station)
     else:
-        return StationWithoutCoords.parse_obj(station)
+        return StationWithoutCoords.model_validate(station)
