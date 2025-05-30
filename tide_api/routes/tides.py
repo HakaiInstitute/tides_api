@@ -406,7 +406,11 @@ def tide_at_time_for_station_as_json(
     )
 
     # Convert datetime to Arrow object with timezone
-    query_time = arrow.get(date_time).to(tz)
+    # If the input datetime is timezone-naive, assume it's in the station's timezone
+    if date_time.tzinfo is None:
+        query_time = arrow.get(date_time).replace(tzinfo=tz)
+    else:
+        query_time = arrow.get(date_time).to(tz)
 
     # Create StationTides object with a day range around the query time
     # This ensures we have enough data to interpolate
