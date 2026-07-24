@@ -1,5 +1,3 @@
-Absolutely! Here's a GitHub repo README.md for a project maintaining the API described by your openapi.json file.
-
 # Tide Window API
 
 ## Description
